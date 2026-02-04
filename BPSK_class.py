@@ -85,4 +85,5 @@ class BPSK: # self переменная ссылка на сам класс, г�
 
 
 bpsk_1 = BPSK(number_symbols=100, H=1, SNR_db=3)
+
 bpsk_1.plot()
