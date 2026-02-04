@@ -7,6 +7,7 @@ class BPSK:  # self переменная ссылка на сам класс, г
         self.number_symbols = number_symbols
         self.H = H
         self.SNR_db = SNR_db
+        self.SNR = None
         self.x = None
         self.y = None
         self.power_noise = None
@@ -23,7 +24,9 @@ class BPSK:  # self переменная ссылка на сам класс, г
             elif x_bytes[i] == 1:
                 x.append(-1 + 0j)
         self.x = np.array(x)
-        print(self.x)
+        print(type(self.x))
+        print(type(self.H))
+        
 
 
 
@@ -32,6 +35,7 @@ class BPSK:  # self переменная ссылка на сам класс, г
 
         power_x = np.mean(np.abs(self.x) ** 2)
         SNR = 10 ** (self.SNR_db / 10)
+        self.SNR = SNR
         self.power_noise = power_x / SNR
 
         print(f"Мощность сигнала: {power_x}")
@@ -48,28 +52,54 @@ class BPSK:  # self переменная ссылка на сам класс, г
             y[i] = self.H * self.x[i] + noise
 
 
-        self.y = np.array(y)
-        print(noise)
+        self.y = (y)
+        print(type(self.y))
 
 
 
 
     def zero_forcing(self):
-        self.y_zf=self.y/self.H
+        self.y_zf = self.y/self.H
 
-        print(y_zf)
+        
 
 
 
 
     def mmse(self):
-        self.zero_forcing()
+        self.y_mmse = self.y*(np.conjugate(self.H)/( (np.abs(self.H))**2 +1/self.SNR ) )
 
+    def decod(self):
+        """
+        y_bytes = []
+        for i in range(self.number_symbols):
+            if np.abs(-1 - y[i] ) > np.abs(1 - y[i] ):
+                y_bytes[i] = 1
+            if np.abs(-1 - y[i] ) <  np.abs(1 - y[i] ):
+                y_bytes[i] = 1
+            else:
+                y_bytes = np.random(0,2)
+        """
+    None    
+            
+
+
+    def BER():
+        None
+
+
+    def EVM():
+        None 
 
 
     def plot(self):
+        
 
         self.channel_with_noise()
+
+        self.zero_forcing()
+
+        self.mmse()
 
         x_re = self.x.real
         x_im = self.x.imag
@@ -77,21 +107,53 @@ class BPSK:  # self переменная ссылка на сам класс, г
         y_re = self.y.real
         y_im = self.y.imag
 
+
+        y_zre = self.y_zf.real
+        y_zim = self.y_zf.imag
+
+
+        y_re_mmse = self.y_mmse.real
+        y_im_mmse = self.y_mmse.imag
+
+       
+        print(type(self.y_zf))
+
     
 
-        f, ax = plt.subplots(2, 2)
-        ax[0,0].scatter(x_re, x_im, color='red')
+        f, ax = plt.subplots(2, 2, figsize=(10, 10))
+        ax[0,0].scatter(x_re, x_im, color='red', s = 100)
         ax[0,0].grid()
         ax[0,0].set_xlabel('Q')
         ax[0,0].set_ylabel('I')
         ax[0,0].set_title("Исходный сигнал")
 
-        ax[0,1].scatter(y_re, y_im)
+        ax[0,1].scatter(y_re, y_im,s = 100)
         ax[0,1].scatter(x_re, x_im, color='red')
         ax[0,1].set_xlabel('Q')
         ax[0,1].set_ylabel('I')
         ax[0,1].set_title("Принятый сигнал")
         ax[0,1].grid()
+
+
+
+        ax[1,0].scatter(y_zre, y_zim)
+        ax[1,0].scatter(x_re, x_im, color='red')
+        ax[1,0].set_xlabel('Q')
+        ax[1,0].set_ylabel('I')
+        ax[1,0].set_title("ZF эквалайзинг")
+        ax[1,0].grid()
+
+
+
+        ax[1,1].scatter(y_re_mmse , y_im_mmse)
+        ax[1,1].scatter(x_re, x_im, color='red')
+        ax[1,1].set_xlabel('Q')
+        ax[1,1].set_ylabel('I')
+        ax[1,1].set_title("MMSE эквалайзинг")
+        ax[1,1].grid()
+
+
+        
 
 
 
@@ -102,6 +164,6 @@ class BPSK:  # self переменная ссылка на сам класс, г
         plt.show()
 
 
-bpsk_1 = BPSK(number_symbols=100, H=0.7+0.7j, SNR_db=1)
+bpsk_1 = BPSK(number_symbols=500, H=0.7+0.7j, SNR_db=1)
 
 bpsk_1.plot()
