@@ -17,7 +17,7 @@ class BPSK:  # self переменная ссылка на сам класс, г
         self.output_bytes = None
 
     def modulating(self):  # модуляция 0 эти -1 , 1 это 1
-        self.x_bytes = np.random.randint(0, 2, self.number_symbols) # мин, макс , размерность массива. рэндинт - целые
+        self.x_bytes = np.random.randint(0, 2, self.number_symbols)  # мин, макс , размерность массива. рэндинт - целые
         x = []
         for i in range(self.number_symbols):
             if self.x_bytes[i] == 1:
@@ -25,7 +25,6 @@ class BPSK:  # self переменная ссылка на сам класс, г
             elif self.x_bytes[i] == 0:
                 x.append(-1 + 0j)
         self.x = np.array(x)
-        
 
     def power(self):  # нахождение мощности шума через осш в дб
         self.modulating()
@@ -46,8 +45,7 @@ class BPSK:  # self переменная ссылка на сам класс, г
             noise = (np.random.randn() + 1j * np.random.randn()) * np.sqrt(self.power_noise / 2)
             y[i] = self.H * self.x[i] + noise
 
-        self.y = (y)
-        
+        self.y = y
 
     def zero_forcing(self):
         self.y_zf = self.y / self.H
@@ -55,37 +53,68 @@ class BPSK:  # self переменная ссылка на сам класс, г
     def mmse(self):
         self.y_mmse = self.y * (np.conjugate(self.H) / ((np.abs(self.H)) ** 2 + 1 / self.SNR))
 
-    def decod(self,output):
-        
+    def decod(self, output):
+
         output_bytes = np.zeros(self.number_symbols)
         for i in range(self.number_symbols):
-            if output[i].real<0:
+            if output[i].real < 0:
                 output_bytes[i] = 0
-            #когда здесь были разделены случаи больше  меньше, а  в случае ранвых расстояний случайное кодирование(как должно быть) ошибка на порядок выше
+            # когда здесь были разделены случаи больше  меньше, а  в случае ранвых расстояний случайное кодирование(как должно быть) ошибка на порядок выше
             else:
-                output_bytes[i] = 1 
+                output_bytes[i] = 1
         self.output_bytes = np.array(output_bytes)
 
-        return output_bytes       
+        return output_bytes
 
-    
 
-    def ber(self , dec_bytes):
+    def ber(self, dec_bytes):
 
-        count=0
+        count = 0
 
         for i in range(self.number_symbols):
             if dec_bytes[i] != self.x_bytes[i]:
-                count+=1
-        
-        ber = count/self.number_symbols
-        return ber
-    # def ber_plot(self, snr_range,type_eq):
-    #     ber_list = []
+                count += 1
 
-    #     for  i in snr_range:
-    #           bpsk = BPSK(number_symbols=self.number_symbols,  H=self.H, SNR_db=snr_db)
-        
+        ber = count / self.number_symbols
+        return ber
+
+
+    def ber_vs_snr(self, snr_db_range): #написал не сам, надо пеерписать по-хорошему
+        ber_zf = []
+        ber_mmse = []
+
+        for snr_db in snr_db_range:
+            bpsk = BPSK(
+                number_symbols=self.number_symbols,
+                H=self.H,
+                SNR_db=snr_db
+            )
+
+            bpsk.channel_with_noise()
+
+
+            bpsk.zero_forcing()
+            dec_zf = bpsk.decod(bpsk.y_zf)
+            ber_zf.append(bpsk.ber(dec_zf))
+
+
+            bpsk.mmse()
+            dec_mmse = bpsk.decod(bpsk.y_mmse)
+            ber_mmse.append(bpsk.ber(dec_mmse))
+
+
+
+
+        plt.figure(figsize=(8, 6))
+        plt.semilogy(snr_db_range, ber_zf,  label='ZF')
+        plt.semilogy(snr_db_range, ber_mmse, label='MMSE')
+        plt.grid(True, which='both')
+        plt.xlabel("SNR, dB")
+        plt.ylabel("BER")
+        plt.title("BER vs SNR (ZF и MMSE)")
+        plt.legend()
+        plt.show()
+
 
 
 
@@ -93,7 +122,9 @@ class BPSK:  # self переменная ссылка на сам класс, г
     def EVM(self):
         None
 
+
     def plot(self):
+
 
         # Вызов методов
 
@@ -103,25 +134,18 @@ class BPSK:  # self переменная ссылка на сам класс, г
 
         self.mmse()
 
-        decod_y =self.decod(self.y)
+        decod_y = self.decod(self.y)
 
-        decod_yzf =self.decod(self.y_zf)
-        decod_y_mmse =self.decod(self.y_mmse)
+        decod_yzf = self.decod(self.y_zf)
+        decod_y_mmse = self.decod(self.y_mmse)
 
         ber_y = self.ber(decod_y)
 
         ber_yzf = self.ber(decod_yzf)
-        print(ber_yzf )
+        print(ber_yzf)
 
         ber_ymmse = self.ber(decod_y_mmse)
         print(ber_ymmse)
-
-
-        
-
-       
-
-        
 
         x_re = self.x.real
         x_im = self.x.imag
@@ -134,8 +158,6 @@ class BPSK:  # self переменная ссылка на сам класс, г
 
         y_re_mmse = self.y_mmse.real
         y_im_mmse = self.y_mmse.imag
-
-        
 
         f1, ax1 = plt.subplots(2, 2, figsize=(10, 10))
         ax1[0, 0].scatter(x_re, x_im, color='red', s=10)
@@ -151,14 +173,14 @@ class BPSK:  # self переменная ссылка на сам класс, г
         ax1[0, 1].set_title("Принятый сигнал")
         ax1[0, 1].grid()
 
-        ax1[1, 0].scatter(y_zre, y_zim,s=1)
+        ax1[1, 0].scatter(y_zre, y_zim, s=1)
         ax1[1, 0].scatter(x_re, x_im, color='red')
         ax1[1, 0].set_xlabel('I')
         ax1[1, 0].set_ylabel('Q')
         ax1[1, 0].set_title("ZF эквалайзинг")
         ax1[1, 0].grid()
 
-        ax1[1, 1].scatter(y_re_mmse, y_im_mmse,s=1)
+        ax1[1, 1].scatter(y_re_mmse, y_im_mmse, s=1)
         ax1[1, 1].scatter(x_re, x_im, color='red')
         ax1[1, 1].set_xlabel('I')
         ax1[1, 1].set_ylabel('Q')
@@ -177,7 +199,6 @@ class BPSK:  # self переменная ссылка на сам класс, г
 
         f3, ax3 = plt.subplots(1, 3, figsize=(10, 10))
 
-
         ax3[0].scatter(x_re, x_im, color='red', s=100)
         ax3[0].grid()
         ax3[0].set_xlabel('I')
@@ -191,7 +212,7 @@ class BPSK:  # self переменная ссылка на сам класс, г
         ax3[1].set_ylabel('Q')
         ax3[1].set_title(f"Принятый сигнал, H ={self.H}, SNR = {self.SNR_db} Дб")
 
-        ax3[2].scatter(y_re_mmse, y_im_mmse, label='MMSE',s=1)
+        ax3[2].scatter(y_re_mmse, y_im_mmse, label='MMSE', s=1)
         ax3[2].scatter(y_zre, y_zim, color='red', label='ZF', s=1)
         ax3[2].set_xlabel('I')
         ax3[2].set_ylabel('Q')
@@ -199,11 +220,10 @@ class BPSK:  # self переменная ссылка на сам класс, г
         ax3[2].set_ylabel('Q')
         ax3[2].set_title('MMSE и ZF ')
         ax3[2].legend()
-
-
-        
+        plt.show()
 
 
 bpsk_1 = BPSK(number_symbols=10000, H=0.7 + 0.7j, SNR_db=1)
 
+bpsk_1 .ber_vs_snr(np.arange(-5,5,0.1))
 bpsk_1.plot()
