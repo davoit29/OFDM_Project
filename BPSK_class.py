@@ -121,7 +121,7 @@ class BPSK:  # self переменная ссылка на сам класс, г
 
     def evm(self, output):
 
-        return np.mean((self.x - output)**2)
+        return np.sqrt(np.mean(np.abs(self.x - output) ** 2) / np.mean(np.abs(self.x) ** 2))
     
 
     def evm_snr(self , snr_db_range):
