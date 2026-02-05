@@ -11,19 +11,21 @@ class BPSK:  # self переменная ссылка на сам класс, г
         self.x = None
         self.y = None
         self.power_noise = None
+        self.x_bytes = None
+        self.y_bytes = None
         self.y_zf = None
+        self.output_bytes = None
 
     def modulating(self):  # модуляция 0 эти -1 , 1 это 1
-        x_bytes = np.random.randint(0, 2, self.number_symbols)
+        self.x_bytes = np.random.randint(0, 2, self.number_symbols) # мин, макс , размерность массива. рэндинт - целые
         x = []
         for i in range(self.number_symbols):
-            if x_bytes[i] == 0:
+            if self.x_bytes[i] == 1:
                 x.append(1 + 0j)
-            elif x_bytes[i] == 1:
+            elif self.x_bytes[i] == 0:
                 x.append(-1 + 0j)
         self.x = np.array(x)
-        print(type(self.x))
-        print(type(self.H))
+        
 
     def power(self):  # нахождение мощности шума через осш в дб
         self.modulating()
@@ -45,7 +47,7 @@ class BPSK:  # self переменная ссылка на сам класс, г
             y[i] = self.H * self.x[i] + noise
 
         self.y = (y)
-        print(type(self.y))
+        
 
     def zero_forcing(self):
         self.y_zf = self.y / self.H
@@ -53,33 +55,66 @@ class BPSK:  # self переменная ссылка на сам класс, г
     def mmse(self):
         self.y_mmse = self.y * (np.conjugate(self.H) / ((np.abs(self.H)) ** 2 + 1 / self.SNR))
 
-    def decod(self):
-        """
-        y_bytes = []
+    def decod(self,output):
+        
+        output_bytes = np.zeros(self.number_symbols)
         for i in range(self.number_symbols):
-            if np.abs(-1 - y[i] ) > np.abs(1 - y[i] ):
-                y_bytes[i] = 1
-            if np.abs(-1 - y[i] ) <  np.abs(1 - y[i] ):
-                y_bytes[i] = 1
+            if output[i].real<0:
+                output_bytes[i] = 0
+            #когда здесь были разделены случаи больше  меньше, а  в случае ранвых расстояний случайное кодирование(как должно быть) ошибка на порядок выше
             else:
-                y_bytes = np.random(0,2)
-        """
+                output_bytes[i] = 1 
+        self.output_bytes = np.array(output_bytes)
 
-    None
+        return output_bytes       
 
-    def BER(self):
-        None
+    
+
+    def ber(self , dec_bytes):
+
+        count=0
+
+        for i in range(self.number_symbols):
+            if dec_bytes[i] != self.x_bytes[i]:
+                count+=1
+        
+        ber = count/self.number_symbols
+        return ber
+
+
 
     def EVM(self):
         None
 
     def plot(self):
 
+        # Вызов методов
+
         self.channel_with_noise()
 
         self.zero_forcing()
 
         self.mmse()
+
+        decod_y =self.decod(self.y)
+
+        decod_yzf =self.decod(self.y_zf)
+        decod_y_mmse =self.decod(self.y_mmse)
+
+        ber_y = self.ber(decod_y)
+
+        ber_yzf = self.ber(decod_yzf)
+        print(ber_yzf )
+
+        ber_ymmse = self.ber(decod_y_mmse)
+        print(ber_ymmse)
+
+
+        
+
+       
+
+        
 
         x_re = self.x.real
         x_im = self.x.imag
@@ -93,7 +128,7 @@ class BPSK:  # self переменная ссылка на сам класс, г
         y_re_mmse = self.y_mmse.real
         y_im_mmse = self.y_mmse.imag
 
-        print(type(self.y_zf))
+        
 
         f1, ax1 = plt.subplots(2, 2, figsize=(10, 10))
         ax1[0, 0].scatter(x_re, x_im, color='red', s=10)
@@ -159,7 +194,7 @@ class BPSK:  # self переменная ссылка на сам класс, г
         ax3[2].legend()
 
 
-        plt.show()
+        
 
 
 bpsk_1 = BPSK(number_symbols=10000, H=0.7 + 0.7j, SNR_db=1)
