@@ -13,8 +13,6 @@ class BPSK:  # self переменная ссылка на сам класс, г
         self.power_noise = None
         self.y_zf = None
 
-
-
     def modulating(self):  # модуляция 0 эти -1 , 1 это 1
         x_bytes = np.random.randint(0, 2, self.number_symbols)
         x = []
@@ -26,9 +24,6 @@ class BPSK:  # self переменная ссылка на сам класс, г
         self.x = np.array(x)
         print(type(self.x))
         print(type(self.H))
-        
-
-
 
     def power(self):  # нахождение мощности шума через осш в дб
         self.modulating()
@@ -42,8 +37,6 @@ class BPSK:  # self переменная ссылка на сам класс, г
         print(f"SNR (линейное): {SNR}")
         print(f"Мощность шума: {self.power_noise}")
 
-
-
     def channel_with_noise(self):  # через плотность моделируем случайный шум, добавляем к H*x
         self.power()
         y = np.zeros(self.number_symbols, dtype=complex)
@@ -51,23 +44,14 @@ class BPSK:  # self переменная ссылка на сам класс, г
             noise = (np.random.randn() + 1j * np.random.randn()) * np.sqrt(self.power_noise / 2)
             y[i] = self.H * self.x[i] + noise
 
-
         self.y = (y)
         print(type(self.y))
 
-
-
-
     def zero_forcing(self):
-        self.y_zf = self.y/self.H
-
-        
-
-
-
+        self.y_zf = self.y / self.H
 
     def mmse(self):
-        self.y_mmse = self.y*(np.conjugate(self.H)/( (np.abs(self.H))**2 +1/self.SNR ) )
+        self.y_mmse = self.y * (np.conjugate(self.H) / ((np.abs(self.H)) ** 2 + 1 / self.SNR))
 
     def decod(self):
         """
@@ -80,20 +64,16 @@ class BPSK:  # self переменная ссылка на сам класс, г
             else:
                 y_bytes = np.random(0,2)
         """
-    None    
-            
 
+    None
 
-    def BER():
+    def BER(self):
         None
 
-
-    def EVM():
-        None 
-
+    def EVM(self):
+        None
 
     def plot(self):
-        
 
         self.channel_with_noise()
 
@@ -107,63 +87,81 @@ class BPSK:  # self переменная ссылка на сам класс, г
         y_re = self.y.real
         y_im = self.y.imag
 
-
         y_zre = self.y_zf.real
         y_zim = self.y_zf.imag
-
 
         y_re_mmse = self.y_mmse.real
         y_im_mmse = self.y_mmse.imag
 
-       
         print(type(self.y_zf))
 
-    
+        f1, ax1 = plt.subplots(2, 2, figsize=(10, 10))
+        ax1[0, 0].scatter(x_re, x_im, color='red', s=10)
+        ax1[0, 0].grid()
+        ax1[0, 0].set_xlabel('I')
+        ax1[0, 0].set_ylabel('Q')
+        ax1[0, 0].set_title("Исходный сигнал")
 
-        f, ax = plt.subplots(2, 2, figsize=(10, 10))
-        ax[0,0].scatter(x_re, x_im, color='red', s = 100)
-        ax[0,0].grid()
-        ax[0,0].set_xlabel('Q')
-        ax[0,0].set_ylabel('I')
-        ax[0,0].set_title("Исходный сигнал")
+        ax1[0, 1].scatter(y_re, y_im, s=1)
+        ax1[0, 1].scatter(x_re, x_im, color='red')
+        ax1[0, 1].set_xlabel('I')
+        ax1[0, 1].set_ylabel('Q')
+        ax1[0, 1].set_title("Принятый сигнал")
+        ax1[0, 1].grid()
 
-        ax[0,1].scatter(y_re, y_im,s = 100)
-        ax[0,1].scatter(x_re, x_im, color='red')
-        ax[0,1].set_xlabel('Q')
-        ax[0,1].set_ylabel('I')
-        ax[0,1].set_title("Принятый сигнал")
-        ax[0,1].grid()
+        ax1[1, 0].scatter(y_zre, y_zim,s=1)
+        ax1[1, 0].scatter(x_re, x_im, color='red')
+        ax1[1, 0].set_xlabel('I')
+        ax1[1, 0].set_ylabel('Q')
+        ax1[1, 0].set_title("ZF эквалайзинг")
+        ax1[1, 0].grid()
 
+        ax1[1, 1].scatter(y_re_mmse, y_im_mmse,s=1)
+        ax1[1, 1].scatter(x_re, x_im, color='red')
+        ax1[1, 1].set_xlabel('I')
+        ax1[1, 1].set_ylabel('Q')
+        ax1[1, 1].set_title("MMSE эквалайзинг")
+        ax1[1, 1].grid()
 
+        f2, ax2 = plt.subplots(1, 1, figsize=(10, 10))
+        ax2.scatter(y_re_mmse, y_im_mmse, label='MMSE')
+        ax2.scatter(y_zre, y_zim, color='red', label='ZF', s=10)
+        ax2.set_xlabel('I')
+        ax2.set_ylabel('Q')
+        ax2.set_xlabel('I')
+        ax2.set_ylabel('Q')
+        ax2.set_title('MMSE и ZF')
+        ax2.legend()
 
-        ax[1,0].scatter(y_zre, y_zim)
-        ax[1,0].scatter(x_re, x_im, color='red')
-        ax[1,0].set_xlabel('Q')
-        ax[1,0].set_ylabel('I')
-        ax[1,0].set_title("ZF эквалайзинг")
-        ax[1,0].grid()
-
-
-
-        ax[1,1].scatter(y_re_mmse , y_im_mmse)
-        ax[1,1].scatter(x_re, x_im, color='red')
-        ax[1,1].set_xlabel('Q')
-        ax[1,1].set_ylabel('I')
-        ax[1,1].set_title("MMSE эквалайзинг")
-        ax[1,1].grid()
-
-
-        
+        f3, ax3 = plt.subplots(1, 3, figsize=(10, 10))
 
 
+        ax3[0].scatter(x_re, x_im, color='red', s=100)
+        ax3[0].grid()
+        ax3[0].set_xlabel('I')
+        ax3[0].set_ylabel('Q')
+        ax3[0].set_title("Исходный сигнал BPSK")
 
+        ax3[1].scatter(y_re, y_im, color='blue', s=1)
+        ax3[1].scatter(x_re, x_im, color='red', s=10)
+        ax3[1].grid()
+        ax3[1].set_xlabel('I')
+        ax3[1].set_ylabel('Q')
+        ax3[1].set_title(f"Принятый сигнал, H ={self.H}, SNR = {self.SNR_db} Дб")
 
-
+        ax3[2].scatter(y_re_mmse, y_im_mmse, label='MMSE',s=1)
+        ax3[2].scatter(y_zre, y_zim, color='red', label='ZF', s=1)
+        ax3[2].set_xlabel('I')
+        ax3[2].set_ylabel('Q')
+        ax3[2].set_xlabel('I')
+        ax3[2].set_ylabel('Q')
+        ax3[2].set_title('MMSE и ZF ')
+        ax3[2].legend()
 
 
         plt.show()
 
 
-bpsk_1 = BPSK(number_symbols=500, H=0.7+0.7j, SNR_db=1)
+bpsk_1 = BPSK(number_symbols=10000, H=0.7 + 0.7j, SNR_db=1)
 
 bpsk_1.plot()
