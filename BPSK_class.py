@@ -119,8 +119,42 @@ class BPSK:  # self переменная ссылка на сам класс, г
 
 
 
-    def EVM(self):
-        None
+    def evm(self, output):
+
+        return np.mean((self.x - output)**2)
+    
+
+    def evm_snr(self , snr_db_range):
+
+        evm_zf = []
+        evm_mmse = []
+
+        for i in snr_db_range:
+
+            bpsk = BPSK( number_symbols = self.number_symbols, H = self.H , SNR_db = i )
+
+            bpsk.channel_with_noise()
+
+            bpsk.zero_forcing()
+            evm_zf.append(bpsk.evm(bpsk.y_zf))
+
+            bpsk.mmse()
+            evm_mmse.append(bpsk.evm(bpsk.y_mmse))
+
+        plt.figure(figsize=(8, 6))
+        plt.semilogy(snr_db_range, evm_zf,  label='ZF')
+        plt.semilogy(snr_db_range, evm_mmse, label='MMSE')
+        plt.grid(True, which='both')
+        plt.xlabel("SNR, dB")
+        plt.ylabel("EVM")
+        plt.title("EVM (ZF и MMSE)")
+        plt.legend()
+
+        plt.show()
+ 
+        
+
+        
 
 
     def plot(self):
@@ -225,5 +259,7 @@ class BPSK:  # self переменная ссылка на сам класс, г
 
 bpsk_1 = BPSK(number_symbols=10000, H=0.7 + 0.7j, SNR_db=1)
 
-bpsk_1 .ber_vs_snr(np.arange(-5,5,0.1))
+bpsk_1.ber_vs_snr(np.arange(-5,5,0.1))
 bpsk_1.plot()
+
+bpsk_1.evm_snr(np.arange(-5,5,0.1))
