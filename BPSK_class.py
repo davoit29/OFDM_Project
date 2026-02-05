@@ -80,6 +80,13 @@ class BPSK:  # self переменная ссылка на сам класс, г
         
         ber = count/self.number_symbols
         return ber
+    # def ber_plot(self, snr_range,type_eq):
+    #     ber_list = []
+
+    #     for  i in snr_range:
+    #           bpsk = BPSK(number_symbols=self.number_symbols,  H=self.H, SNR_db=snr_db)
+        
+
 
 
 
