@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 
 
 class BPSK:  # self переменная ссылка на сам класс, глобализирует переменные
+
+
     def __init__(self, number_symbols=100, H=1, SNR_db=3):
         self.number_symbols = number_symbols
         self.H = H
@@ -16,17 +18,24 @@ class BPSK:  # self переменная ссылка на сам класс, г
         self.y_zf = None
         self.output_bytes = None
 
+
     def modulating(self):  # модуляция 0 эти -1 , 1 это 1
+
         self.x_bytes = np.random.randint(0, 2, self.number_symbols)  # мин, макс , размерность массива. рэндинт - целые
+
         x = []
+
         for i in range(self.number_symbols):
             if self.x_bytes[i] == 1:
                 x.append(1 + 0j)
             elif self.x_bytes[i] == 0:
                 x.append(-1 + 0j)
+
         self.x = np.array(x)
 
+
     def power(self):  # нахождение мощности шума через осш в дб
+
         self.modulating()
 
         power_x = np.mean(np.abs(self.x) ** 2)
@@ -38,20 +47,29 @@ class BPSK:  # self переменная ссылка на сам класс, г
         print(f"SNR (линейное): {SNR}")
         print(f"Мощность шума: {self.power_noise}")
 
+
     def channel_with_noise(self):  # через плотность моделируем случайный шум, добавляем к H*x
+
         self.power()
+
         y = np.zeros(self.number_symbols, dtype=complex)
+
         for i in range(self.number_symbols):
             noise = (np.random.randn() + 1j * np.random.randn()) * np.sqrt(self.power_noise / 2)
             y[i] = self.H * self.x[i] + noise
 
         self.y = y
 
+
     def zero_forcing(self):
+
         self.y_zf = ((np.conjugate(self.H) / (np.abs(self.H))**2) )* self.y
 
+
     def mmse(self):
+
         self.y_mmse = self.y * (np.conjugate(self.H) / ((np.abs(self.H)) ** 2 + 1 / self.SNR))
+
 
     def decod(self, output):
 
@@ -69,8 +87,6 @@ class BPSK:  # self переменная ссылка на сам класс, г
 
     def ber(self, dec_bytes):
 
-
-
         count = 0
 
         for i in range(self.number_symbols):
@@ -81,7 +97,8 @@ class BPSK:  # self переменная ссылка на сам класс, г
         return ber
 
 
-    def ber_vs_snr(self, snr_db_range):  # написал не сам, надо пеерписать по-хорошему
+    def ber_snr(self, snr_db_range):  # написал не сам, надо пеерписать по-хорошему
+
         ber_zf = []
         ber_mmse = []
 
@@ -108,15 +125,16 @@ class BPSK:  # self переменная ссылка на сам класс, г
         plt.grid(True, which='both')
         plt.xlabel("SNR, dB")
         plt.ylabel("BER")
-        plt.title("BER vs SNR (ZF и MMSE)")
+        plt.title("BER от SNR (ZF и MMSE)")
         plt.legend()
         plt.show()
 
 
+
     def evm(self, output):
 
-
         return np.mean(np.abs(output-self.x) ** 2)
+
 
 
     def evm_snr(self, snr_db_range):
@@ -211,8 +229,8 @@ class BPSK:  # self переменная ссылка на сам класс, г
         # ax1[1, 1].grid()
 
         f2, ax2 = plt.subplots(1, 1, figsize=(10, 10))
-        ax2.scatter(y_re_mmse, y_im_mmse, label='MMSE')
-        ax2.scatter(y_zre, y_zim, color='red', label='ZF', s=10)
+        ax2.scatter(y_re_mmse, y_im_mmse, label='MMSE',s=1 )
+        ax2.scatter(y_zre, y_zim, color='red', label='ZF', s=1)
         ax2.set_xlabel('I')
         ax2.set_ylabel('Q')
         ax2.set_xlabel('I')
@@ -243,12 +261,19 @@ class BPSK:  # self переменная ссылка на сам класс, г
         # ax3[2].set_ylabel('Q')
         # ax3[2].set_title('MMSE и ZF ')
         # ax3[2].legend()
-        # plt.show()
+        plt.show()
+
+
+
 
 
 bpsk_1 = BPSK(number_symbols=10000, H=0.7 + 0.7j, SNR_db=1)
 
-bpsk_1.ber_vs_snr(np.arange(-5, 6, 0.1))
-# bpsk_1.plot()
+
+bpsk_1.ber_snr(np.arange(-5, 6, 0.1))
+
 
 bpsk_1.evm_snr(np.arange(-5, 6, 0.1))
+
+
+# bpsk_1.plot()
