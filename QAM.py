@@ -7,14 +7,15 @@ from commpy.modulation import QAMModem
 class QAM:  # self переменная ссылка на сам класс, глобализирует переменные
 
 
-    def __init__(self, number_symbols, H, SNR_db,M):
+    def __init__(self, number_symbols, H, SNR_db, M):
         self.number_symbols = number_symbols
         self.H = H
         self.SNR_db = SNR_db
         self.SNR = None
         self.x = None
         self.y = None
-        self.M=M
+        self.bites_number = None
+        self.M = M
         self.power_noise = None
         self.x_bytes = None
         self.y_bytes = None
@@ -24,16 +25,14 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
     def modulating(self):  # модуляция 0 эти -1 , 1 это 1
 
-        mod_num = int(self.number_symbols * np.log2(self.M))
+        bites_number = int(self.number_symbols * np.log2(self.M))
+        self.bites_number = bites_number
 
-
-
-        self.x_bytes = np.random.randint(0, 2,mod_num)  # мин, макс , размерность массива. рэндинт - целые
+        self.x_bytes = np.random.randint(0, 2, self.bites_number)  # мин, макс , размерность массива. рэндинт - целые
 
         modem = QAMModem(self.M)
 
-        x =modem.modulate(self.x_bytes)
-
+        x = modem.modulate(self.x_bytes)
 
         self.x = np.array(x)
 
@@ -43,7 +42,6 @@ class QAM:  # self переменная ссылка на сам класс, г�
         self.modulating()
 
         signal = set(self.x)
-
         signal = np.array(list(signal))
 
         power_x = np.mean(np.abs(signal) ** 2)
@@ -71,7 +69,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
     def zero_forcing(self):
 
-        self.y_zf = ((np.conjugate(self.H) / (np.abs(self.H))**2) )* self.y
+        self.y_zf = ((np.conjugate(self.H) / (np.abs(self.H)) ** 2)) * self.y
 
 
     def mmse(self):
@@ -81,13 +79,10 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
     def decod(self, output):
 
-        output_bytes = np.zeros(self.number_symbols)
+        output_bytes = np.zeros(self.bites_number)
         modem = QAMModem(self.M)
 
-
-
-        output_bytes = modem.demodulate(output, demod_type = 'hard')
-
+        output_bytes = modem.demodulate(output, demod_type='hard')
 
         self.output_bytes = np.array(output_bytes)
 
@@ -98,11 +93,11 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
         count = 0
 
-        for i in range(self.number_symbols):
+        for i in range(self.bites_number):
             if dec_bytes[i] != self.x_bytes[i]:
                 count += 1
 
-        ber = count / self.number_symbols
+        ber = count / self.bites_number
         return ber
 
 
@@ -140,11 +135,9 @@ class QAM:  # self переменная ссылка на сам класс, г�
         plt.show()
 
 
-
     def evm(self, output):
 
-        return np.mean(np.abs(output-self.x) ** 2)
-
+        return np.mean(np.abs(output - self.x) ** 2)
 
 
     def evm_snr(self, snr_db_range):
@@ -153,7 +146,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
         evm_mmse = []
 
         for i in snr_db_range:
-            qam = QAM(number_symbols=self.number_symbols, H=self.H, SNR_db=i,M=self.M)
+            qam = QAM(number_symbols=self.number_symbols, H=self.H, SNR_db=i, M=self.M)
 
             qam.channel_with_noise()
 
@@ -171,26 +164,18 @@ class QAM:  # self переменная ссылка на сам класс, г�
         plt.ylabel("EVM")
         plt.title("EVM (ZF и MMSE)")
         plt.legend()
-
         plt.show()
 
 
     def plot(self):
 
-        # Вызов методов
-
         self.channel_with_noise()
 
         self.zero_forcing()
-
         self.mmse()
-
-        decod_y = self.decod(self.y)
 
         decod_yzf = self.decod(self.y_zf)
         decod_y_mmse = self.decod(self.y_mmse)
-
-        ber_y = self.ber(decod_y)
 
         ber_yzf = self.ber(decod_yzf)
         print(ber_yzf)
@@ -237,11 +222,10 @@ class QAM:  # self переменная ссылка на сам класс, г�
         ax1[1, 1].set_ylabel('Q')
         ax1[1, 1].set_title("MMSE эквалайзинг")
         ax1[1, 1].grid()
-
         f2, ax2 = plt.subplots(1, 1, figsize=(10, 10))
-        ax2.scatter(y_re_mmse, y_im_mmse, label='MMSE',s=1 )
+        ax2.scatter(y_re_mmse, y_im_mmse, label='MMSE', s=1)
         ax2.scatter(y_zre, y_zim, color='red', label='ZF', s=1)
-        ax2.scatter(x_re, x_im, color='black',s=10)
+        ax2.scatter(x_re, x_im, color='black', s=10)
         ax2.set_xlabel('I')
         ax2.set_ylabel('Q')
         ax2.set_xlabel('I')
@@ -273,19 +257,9 @@ class QAM:  # self переменная ссылка на сам класс, г�
         ax3[2].set_ylabel('Q')
         ax3[2].set_title('MMSE и ZF ')
         ax3[2].legend()
+
         plt.show()
 
 
-
-
-
-qam_1 = QAM(number_symbols=10000, H=0.7 + 0.7j, SNR_db=1,M = 16)
-
-
-# qam_1.ber_snr(np.arange(-5, 6, 0.1))
-#
-#
-# qam_1.evm_snr(np.arange(-5, 6, 0.1))
-
-
+qam_1 = QAM(number_symbols=10000, H=0.7 + 0.7j, SNR_db=1, M=16)
 qam_1.plot()
