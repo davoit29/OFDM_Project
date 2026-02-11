@@ -1,7 +1,8 @@
-import commpy as cp
 import numpy as np
 import matplotlib.pyplot as plt
+import commpy as cp
 from commpy.modulation import QAMModem
+
 
 
 class QAM:  # self переменная ссылка на сам класс, глобализирует переменные
@@ -15,6 +16,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
         self.SNR_db = SNR_db
         self.SNR = None
         self.x_qam = None
+        self.odfm_matrix = None
         self.y = None
         self.bites_number = None
         self.M = M
@@ -27,13 +29,8 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
     def modulating(self):
 
-        # Вычисляем число OFDM символов
 
-        self.number_ofdm_symbols = self.number_ofdm_symbols / self.number_subcarriers
-
-
-
-        bites_number = int(self.number_symbols * np.log2(self.M) *self.number_ofdm_symbols)
+        bites_number = int(self.number_subcarriers * np.log2(self.M) *self.number_ofdm_symbols)
 
         self.bites_number = bites_number
 
@@ -41,35 +38,38 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
         modem = QAMModem(self.M)
 
-        x_qam = modem.modulate(self.x_bytes)
+        self.x_qam = modem.modulate(self.x_bytes)
 
         self.x_qam = np.array(x_qam)
         print(f"Число OFDM символов: {self.number_ofdm_symbols}")
         print(f"Число поднесущих: {self.number_subcarriers}")
         print(f"Всего QAM символов: {len(self.x_qam)}")
+        
 
     def ofdm(self):
 
-        odfm_matrix = self.x_qam .reshape((self.number_ofdm_symbols, self.number_subcarriers ), order='F')
+        self.odfm_matrix = self.x_qam.reshape((self.number_ofdm_symbols, self.number_subcarriers ), order='F')
 
-        self.x_qam_ofdm = odfm_matrix.reshape(self.number_ofdm_symbols,self.number_subcarriers)
+        self.ofdm_matrix_time = np.fft.ifft(self.odfm_matrix)
 
-        x_ofdm_time_four =  np.fft.ifft(self.x_qam_ofdm)
+        print(f'Размерность OFDM матрицы {self.odfm_matrix.shape}')
 
-        x_ofdm_time = x_ofdm_time_four.reshape(-1)
+        pass
+
+        
 
 
 
 
 
-        None
+        
 
 
     def power(self):  # нахождение мощности шума через осш в дб
 
         self.modulating()
 
-        signal = set(self.x)
+        signal = set(self.x_qam)
         signal = np.array(list(signal))
 
         power_x = np.mean(np.abs(signal) ** 2)
@@ -82,17 +82,17 @@ class QAM:  # self переменная ссылка на сам класс, г�
         print(f"Мощность шума: {self.power_noise}")
 
 
-    def channel_with_noise(self):  # через плотность моделируем случайный шум, добавляем к H*x
+    def channel_with_noise(self):  # без импульсной характеристики
 
         self.power()
 
-        y = np.zeros(self.number_symbols, dtype=complex)
+        y_time = np.zeros((self.number_ofdm_symbols,self.number_subcarriers), dtype=complex)
 
-        for i in range(self.number_symbols):
+        for i in range(self.number_ofdm_symbols):
             noise = (np.random.randn() + 1j * np.random.randn()) * np.sqrt(self.power_noise / 2)
-            y[i] = self.H * self.x[i] + noise
+            y_time[i] =  self.ofdm_matrix_time[i] + noise
 
-        self.y = y
+        self.y_time = y_time
 
 
     def zero_forcing(self):
@@ -133,11 +133,12 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
 
     def plot(self):
+        #вызываем прошлые методы
 
-        self.channel_with_noise()
+        # self.channel_with_noise()
 
-        self.zero_forcing()
-        self.mmse()
+        # self.zero_forcing()
+        # self.mmse()
 
         decod_yzf = self.decod(self.y_zf)
         decod_y_mmse = self.decod(self.y_mmse)
@@ -227,4 +228,6 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
 
 qam_1 = QAM( H=0.7 + 0.7j, SNR_db=1, M=16, number_ofdm_symbols=2, number_subcarriers=2 )
-qam_1.plot()
+# qam_1.plot()
+qam_1.modulating()
+qam_1.ofdm()
