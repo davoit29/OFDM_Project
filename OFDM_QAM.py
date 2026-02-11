@@ -1,0 +1,230 @@
+import commpy as cp
+import numpy as np
+import matplotlib.pyplot as plt
+from commpy.modulation import QAMModem
+
+
+class QAM:  # self переменная ссылка на сам класс, глобализирует переменные
+
+
+    def __init__(self,  H, SNR_db, M, number_ofdm_symbols, number_subcarriers):
+        self.number_subcarriers = number_subcarriers
+        self.number_ofdm_symbols = number_ofdm_symbols
+        self.number_symbols = None
+        self.H = H
+        self.SNR_db = SNR_db
+        self.SNR = None
+        self.x_qam = None
+        self.y = None
+        self.bites_number = None
+        self.M = M
+        self.power_noise = None
+        self.x_bytes = None
+        self.y_bytes = None
+        self.y_zf = None
+        self.output_bytes = None
+
+
+    def modulating(self):
+
+        # Вычисляем число OFDM символов
+
+        self.number_ofdm_symbols = self.number_ofdm_symbols / self.number_subcarriers
+
+
+
+        bites_number = int(self.number_symbols * np.log2(self.M) *self.number_ofdm_symbols)
+
+        self.bites_number = bites_number
+
+        self.x_bytes = np.random.randint(0, 2, self.bites_number)  # мин, макс , размерность массива. рэндинт - целые
+
+        modem = QAMModem(self.M)
+
+        x_qam = modem.modulate(self.x_bytes)
+
+        self.x_qam = np.array(x_qam)
+        print(f"Число OFDM символов: {self.number_ofdm_symbols}")
+        print(f"Число поднесущих: {self.number_subcarriers}")
+        print(f"Всего QAM символов: {len(self.x_qam)}")
+
+    def ofdm(self):
+
+        odfm_matrix = self.x_qam .reshape((self.number_ofdm_symbols, self.number_subcarriers ), order='F')
+
+        self.x_qam_ofdm = odfm_matrix.reshape(self.number_ofdm_symbols,self.number_subcarriers)
+
+        x_ofdm_time_four =  np.fft.ifft(self.x_qam_ofdm)
+
+        x_ofdm_time = x_ofdm_time_four.reshape(-1)
+
+
+
+
+
+        None
+
+
+    def power(self):  # нахождение мощности шума через осш в дб
+
+        self.modulating()
+
+        signal = set(self.x)
+        signal = np.array(list(signal))
+
+        power_x = np.mean(np.abs(signal) ** 2)
+        SNR = 10 ** (self.SNR_db / 10)
+        self.SNR = SNR
+        self.power_noise = power_x / SNR
+
+        print(f"Мощность сигнала: {power_x}")
+        print(f"SNR (линейное): {SNR}")
+        print(f"Мощность шума: {self.power_noise}")
+
+
+    def channel_with_noise(self):  # через плотность моделируем случайный шум, добавляем к H*x
+
+        self.power()
+
+        y = np.zeros(self.number_symbols, dtype=complex)
+
+        for i in range(self.number_symbols):
+            noise = (np.random.randn() + 1j * np.random.randn()) * np.sqrt(self.power_noise / 2)
+            y[i] = self.H * self.x[i] + noise
+
+        self.y = y
+
+
+    def zero_forcing(self):
+
+        self.y_zf = ((np.conjugate(self.H) / (np.abs(self.H)) ** 2)) * self.y
+
+
+    def mmse(self):
+
+        self.y_mmse = self.y * (np.conjugate(self.H) / ((np.abs(self.H)) ** 2 + 1 / self.SNR))
+
+
+    def decod(self, output):
+
+        output_bytes = np.zeros(self.bites_number)
+        modem = QAMModem(self.M)
+
+        output_bytes = modem.demodulate(output, demod_type='hard')
+
+        self.output_bytes = np.array(output_bytes)
+
+        return output_bytes
+
+
+    def ber(self, dec_bytes):
+
+        count = 0
+
+        for i in range(self.bites_number):
+            if dec_bytes[i] != self.x_bytes[i]:
+                count += 1
+
+        ber = count / self.bites_number
+        return ber
+
+
+
+
+
+    def plot(self):
+
+        self.channel_with_noise()
+
+        self.zero_forcing()
+        self.mmse()
+
+        decod_yzf = self.decod(self.y_zf)
+        decod_y_mmse = self.decod(self.y_mmse)
+
+        ber_yzf = self.ber(decod_yzf)
+        print(ber_yzf)
+
+        ber_ymmse = self.ber(decod_y_mmse)
+        print(ber_ymmse)
+
+        x_re = self.x.real
+        x_im = self.x.imag
+
+        y_re = self.y.real
+        y_im = self.y.imag
+
+        y_zre = self.y_zf.real
+        y_zim = self.y_zf.imag
+
+        y_re_mmse = self.y_mmse.real
+        y_im_mmse = self.y_mmse.imag
+
+        f1, ax1 = plt.subplots(2, 2, figsize=(10, 10))
+        ax1[0, 0].scatter(x_re, x_im, color='red', s=10)
+        ax1[0, 0].grid()
+        ax1[0, 0].set_xlabel('I')
+        ax1[0, 0].set_ylabel('Q')
+        ax1[0, 0].set_title("Исходный сигнал")
+
+        ax1[0, 1].scatter(y_re, y_im, s=1)
+        ax1[0, 1].scatter(x_re, x_im, color='red')
+        ax1[0, 1].set_xlabel('I')
+        ax1[0, 1].set_ylabel('Q')
+        ax1[0, 1].set_title("Принятый сигнал")
+        ax1[0, 1].grid()
+
+        ax1[1, 0].scatter(y_zre, y_zim, s=1)
+        ax1[1, 0].scatter(x_re, x_im, color='red')
+        ax1[1, 0].set_xlabel('I')
+        ax1[1, 0].set_ylabel('Q')
+        ax1[1, 0].set_title("ZF эквалайзинг")
+        ax1[1, 0].grid()
+
+        ax1[1, 1].scatter(y_re_mmse, y_im_mmse, s=1)
+        ax1[1, 1].scatter(x_re, x_im, color='red')
+        ax1[1, 1].set_xlabel('I')
+        ax1[1, 1].set_ylabel('Q')
+        ax1[1, 1].set_title("MMSE эквалайзинг")
+        ax1[1, 1].grid()
+        f2, ax2 = plt.subplots(1, 1, figsize=(10, 10))
+        ax2.scatter(y_re_mmse, y_im_mmse, label='MMSE', s=1)
+        ax2.scatter(y_zre, y_zim, color='red', label='ZF', s=1)
+        ax2.scatter(x_re, x_im, color='black', s=10)
+        ax2.set_xlabel('I')
+        ax2.set_ylabel('Q')
+        ax2.set_xlabel('I')
+        ax2.set_ylabel('Q')
+        ax2.set_title('MMSE и ZF')
+        ax2.legend()
+
+        f3, ax3 = plt.subplots(1, 3, figsize=(10, 10))
+
+        ax3[0].scatter(x_re, x_im, color='red', s=100)
+        ax3[0].grid()
+        ax3[0].set_xlabel('I')
+        ax3[0].set_ylabel('Q')
+        ax3[0].set_title("Исходный сигнал BPSK")
+
+        ax3[1].scatter(y_re, y_im, color='blue', s=1)
+        ax3[1].scatter(x_re, x_im, color='red', s=10)
+        ax3[1].grid()
+        ax3[1].set_xlabel('I')
+        ax3[1].set_ylabel('Q')
+        ax3[1].set_title(f"Принятый сигнал, H ={self.H}, SNR = {self.SNR_db} Дб")
+
+        ax3[2].scatter(y_re_mmse, y_im_mmse, label='MMSE', s=1)
+        ax3[2].scatter(y_zre, y_zim, color='red', label='ZF', s=1)
+        ax3[2].scatter(x_re, x_im, color='black', s=10)
+        ax3[2].set_xlabel('I')
+        ax3[2].set_ylabel('Q')
+        ax3[2].set_xlabel('I')
+        ax3[2].set_ylabel('Q')
+        ax3[2].set_title('MMSE и ZF ')
+        ax3[2].legend()
+
+        plt.show()
+
+
+qam_1 = QAM( H=0.7 + 0.7j, SNR_db=1, M=16, number_ofdm_symbols=2, number_subcarriers=2 )
+qam_1.plot()
