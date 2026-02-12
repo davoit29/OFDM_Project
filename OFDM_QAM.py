@@ -4,15 +4,13 @@ import commpy as cp
 from commpy.modulation import QAMModem
 
 
-
 class QAM:  # self переменная ссылка на сам класс, глобализирует переменные
 
-
-    def __init__(self,  H, SNR_db, M, number_ofdm_symbols, number_subcarriers):
+    def __init__(self,  SNR_db, M, number_ofdm_symbols, number_subcarriers):
         self.number_subcarriers = number_subcarriers
         self.number_ofdm_symbols = number_ofdm_symbols
         self.number_symbols = None
-        self.H = H
+        self.H = 1
         self.SNR_db = SNR_db
         self.SNR = None
         self.x_qam = None
@@ -24,13 +22,12 @@ class QAM:  # self переменная ссылка на сам класс, г�
         self.x_bytes = None
         self.y_bytes = None
         self.y_zf = None
+        self.y_mmse = None
         self.output_bytes = None
-
 
     def modulating(self):
 
-
-        bites_number = int(self.number_subcarriers * np.log2(self.M) *self.number_ofdm_symbols)
+        bites_number = int(self.number_subcarriers * np.log2(self.M) * self.number_ofdm_symbols)
 
         self.bites_number = bites_number
 
@@ -38,36 +35,30 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
         modem = QAMModem(self.M)
 
-        self.x_qam = modem.modulate(self.x_bytes)
+        self.x_qam =np.array( modem.modulate(self.x_bytes))
 
-        self.x_qam = np.array(x_qam)
+        self.x_qam = np.array(self.x_qam)
         print(f"Число OFDM символов: {self.number_ofdm_symbols}")
         print(f"Число поднесущих: {self.number_subcarriers}")
         print(f"Всего QAM символов: {len(self.x_qam)}")
-        
+
+
 
     def ofdm(self):
 
-        self.odfm_matrix = self.x_qam.reshape((self.number_ofdm_symbols, self.number_subcarriers ), order='F')
+        self.odfm_matrix = self.x_qam.reshape((self.number_ofdm_symbols, self.number_subcarriers))
 
         self.ofdm_matrix_time = np.fft.ifft(self.odfm_matrix)
 
         print(f'Размерность OFDM матрицы {self.odfm_matrix.shape}')
 
-        pass
-
-        
 
 
-
-
-
-        
 
 
     def power(self):  # нахождение мощности шума через осш в дб
 
-        self.modulating()
+
 
         signal = set(self.x_qam)
         signal = np.array(list(signal))
@@ -82,27 +73,41 @@ class QAM:  # self переменная ссылка на сам класс, г�
         print(f"Мощность шума: {self.power_noise}")
 
 
+
+
     def channel_with_noise(self):  # без импульсной характеристики
 
         self.power()
 
-        y_time = np.zeros((self.number_ofdm_symbols,self.number_subcarriers), dtype=complex)
+        y_time = np.zeros((self.number_ofdm_symbols, self.number_subcarriers), dtype=complex)
 
-        for i in range(self.number_ofdm_symbols):
-            noise = (np.random.randn() + 1j * np.random.randn()) * np.sqrt(self.power_noise / 2)
-            y_time[i] =  self.ofdm_matrix_time[i] + noise
+        self.power()
+
+        noise = (np.random.randn(self.number_ofdm_symbols, self.number_subcarriers)
+                 + 1j * np.random.randn(self.number_ofdm_symbols, self.number_subcarriers)) \
+                * np.sqrt(self.power_noise / 2)
+
+        y_time = self.ofdm_matrix_time + noise
 
         self.y_time = y_time
-
+        self.y = np.fft.fft(y_time.reshape(-1))
 
     def zero_forcing(self):
 
-        self.y_zf = ((np.conjugate(self.H) / (np.abs(self.H)) ** 2)) * self.y
+        y_zf_time = ((np.conjugate(self.H) / (np.abs(self.H)) ** 2)) * self.y_time
+
+        y_zf_matrix = np.fft.fft(y_zf_time)
+        self.y_zf = y_zf_matrix.reshape(-1)
 
 
     def mmse(self):
 
-        self.y_mmse = self.y * (np.conjugate(self.H) / ((np.abs(self.H)) ** 2 + 1 / self.SNR))
+        y_mmse_time = self.y_time * (np.conjugate(self.H) / ((np.abs(self.H)) ** 2 + 1 / self.SNR))
+
+        y_mmse_matrix  = np.fft.fft(y_mmse_time)
+        self.y_mmse= y_mmse_matrix.reshape(-1)
+
+
 
 
     def decod(self, output):
@@ -116,7 +121,6 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
         return output_bytes
 
-
     def ber(self, dec_bytes):
 
         count = 0
@@ -128,17 +132,15 @@ class QAM:  # self переменная ссылка на сам класс, г�
         ber = count / self.bites_number
         return ber
 
-
-
-
-
     def plot(self):
-        #вызываем прошлые методы
+        # вызываем прошлые методы
+        self.modulating()
+        self.ofdm()
 
-        # self.channel_with_noise()
+        self.channel_with_noise()
 
-        # self.zero_forcing()
-        # self.mmse()
+        self.zero_forcing()
+        self.mmse()
 
         decod_yzf = self.decod(self.y_zf)
         decod_y_mmse = self.decod(self.y_mmse)
@@ -149,8 +151,8 @@ class QAM:  # self переменная ссылка на сам класс, г�
         ber_ymmse = self.ber(decod_y_mmse)
         print(ber_ymmse)
 
-        x_re = self.x.real
-        x_im = self.x.imag
+        x_re = self.x_qam.real
+        x_im = self.x_qam.imag
 
         y_re = self.y.real
         y_im = self.y.imag
@@ -227,7 +229,11 @@ class QAM:  # self переменная ссылка на сам класс, г�
         plt.show()
 
 
-qam_1 = QAM( H=0.7 + 0.7j, SNR_db=1, M=16, number_ofdm_symbols=2, number_subcarriers=2 )
-# qam_1.plot()
-qam_1.modulating()
-qam_1.ofdm()
+qam_1 = QAM( SNR_db=1, M=16, number_ofdm_symbols=200, number_subcarriers=200)
+qam_1.plot()
+# qam_1.modulating()
+# qam_1.ofdm()
+# qam_1.power()
+# qam_1.channel_with_noise()
+# qam_1.zero_forcing()
+# qam_1.mmse()
