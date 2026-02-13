@@ -47,7 +47,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
         power_x = np.mean(np.abs(signal) ** 2)
         SNR = 10 ** (self.SNR_db / 10)
         self.SNR = SNR
-        self.power_noise = power_x / SNR
+        self.power_noise = 0
 
         print(f"Мощность сигнала: {power_x}")
         print(f"SNR (линейное): {SNR}")
@@ -74,7 +74,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
     def mmse(self):
 
-        self.y_mmse = self.y * (np.conjugate(self.H) / ((np.abs(self.H)) ** 2 + 1 / self.SNR))
+        self.y_mmse = self.y * (np.conjugate(self.H) / ((np.abs(self.H)) ** 2 + self.power_noise))
 
 
     def decod(self, output):
@@ -263,3 +263,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
 qam_1 = QAM(number_symbols=10000, H=0.7 + 0.7j, SNR_db=1, M=16)
 qam_1.plot()
+# qam_1.ber_snr(np.arange(-20, 6, 0.1))
+#
+#
+# qam_1.evm_snr(np.arange(-20, 6, 0.1))
