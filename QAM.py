@@ -47,7 +47,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
         power_x = np.mean(np.abs(signal) ** 2)
         SNR = 10 ** (self.SNR_db / 10)
         self.SNR = SNR
-        self.power_noise = 0
+        self.power_noise = power_x / SNR
 
         print(f"Мощность сигнала: {power_x}")
         print(f"SNR (линейное): {SNR}")
