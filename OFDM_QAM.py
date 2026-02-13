@@ -4,6 +4,8 @@ import commpy as cp
 from commpy.modulation import QAMModem
 
 
+plt.style.use('fivethirtyeight') 
+
 class QAM:  # self переменная ссылка на сам класс, глобализирует переменные
 
     def __init__(self,  SNR_db, M, number_ofdm_symbols, number_subcarriers):
@@ -14,6 +16,8 @@ class QAM:  # self переменная ссылка на сам класс, г�
         self.SNR_db = SNR_db
         self.SNR = None
         self.x_qam = None
+        self.x_qam_time = None
+        self.norm = None
         self.ofdm_matrix = None
         self.y = None
         self.bites_number = None
@@ -30,6 +34,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
         bites_number = int(self.number_subcarriers * np.log2(self.M) * self.number_ofdm_symbols)
 
         self.bites_number = bites_number
+        self.norm = (self.number_ofdm_symbols*self.number_subcarriers*4)
 
         self.x_bytes = np.random.randint(0, 2, self.bites_number)  # мин, макс , размерность массива. рэндинт - целые
 
@@ -38,6 +43,9 @@ class QAM:  # self переменная ссылка на сам класс, г�
         self.x_qam =np.array( modem.modulate(self.x_bytes))
 
         self.x_qam = np.array(self.x_qam)
+
+        
+
         print(f"Число OFDM символов: {self.number_ofdm_symbols}")
         print(f"Число поднесущих: {self.number_subcarriers}")
         print(f"Всего QAM символов: {len(self.x_qam)}")
@@ -48,7 +56,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
         self.ofdm_matrix = self.x_qam.reshape((self.number_ofdm_symbols, self.number_subcarriers))
 
-        self.ofdm_matrix_time = np.fft.ifft(self.ofdm_matrix, axis=1)
+        self.ofdm_matrix_time = (np.fft.ifft(self.ofdm_matrix, axis=1, norm='ortho'))
 
         print(f'Размерность OFDM матрицы {self.ofdm_matrix.shape}')
 
@@ -60,10 +68,10 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
 
 
-        signal = set(self.x_qam)
-        signal = np.array(list(signal))
+        # signal = set(self.x_qam_time)
+        # signal = np.array(list(signal))
 
-        power_x = np.mean(np.abs(self.x_qam) ** 2)
+        power_x = np.mean(np.abs(self.ofdm_matrix_time) ** 2)
         SNR = 10 ** (self.SNR_db / 10)
         self.SNR = SNR
         self.power_noise = power_x / SNR
@@ -90,7 +98,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
         y_time = self.ofdm_matrix_time + noise
 
         self.y_time = y_time
-        self.y_freq = np.fft.fft(y_time, axis=1)
+        self.y_freq = (np.fft.fft(y_time, axis=1,norm='ortho'))
         self.y = self.y_freq.reshape(-1)
 
     def zero_forcing(self):
@@ -145,10 +153,14 @@ class QAM:  # self переменная ссылка на сам класс, г�
         decod_y_mmse = self.decod(self.y_mmse)
 
         ber_yzf = self.ber(decod_yzf)
-        print(ber_yzf)
+        
+        
+
+        
 
         ber_ymmse = self.ber(decod_y_mmse)
-        print(ber_ymmse)
+        print(f"\nBER для ZF: {ber_yzf:.6f}")
+        print(f"BER для MMSE: {ber_ymmse:.6f}")
 
         x_re = self.x_qam.real
         x_im = self.x_qam.imag
@@ -169,30 +181,33 @@ class QAM:  # self переменная ссылка на сам класс, г�
         ax1[0, 0].set_ylabel('Q')
         ax1[0, 0].set_title("Исходный сигнал")
 
-        ax1[0, 1].scatter(y_re, y_im, s=1)
-        ax1[0, 1].scatter(x_re, x_im, color='red')
+        ax1[0, 1].scatter(y_re, y_im, s=1,alpha=0.7)
+        ax1[0, 1].scatter(x_re, x_im, color='red', alpha=0.7)
         ax1[0, 1].set_xlabel('I')
         ax1[0, 1].set_ylabel('Q')
         ax1[0, 1].set_title("Принятый сигнал")
-        ax1[0, 1].grid()
-
-        ax1[1, 0].scatter(y_zre, y_zim, s=1)
-        ax1[1, 0].scatter(x_re, x_im, color='red')
+        
+        ax1[1, 0].scatter(y_zre, y_zim, s=1,alpha=0.7)
+        ax1[1, 0].scatter(x_re, x_im, color='red', alpha=0.7)
         ax1[1, 0].set_xlabel('I')
         ax1[1, 0].set_ylabel('Q')
         ax1[1, 0].set_title("ZF эквалайзинг")
-        ax1[1, 0].grid()
+        
 
-        ax1[1, 1].scatter(y_re_mmse, y_im_mmse, s=1)
-        ax1[1, 1].scatter(x_re, x_im, color='red')
+        ax1[1, 1].scatter(y_re_mmse, y_im_mmse, s=1,alpha=0.7)
+        ax1[1, 1].scatter(x_re, x_im, color='red',alpha=0.7)
         ax1[1, 1].set_xlabel('I')
         ax1[1, 1].set_ylabel('Q')
         ax1[1, 1].set_title("MMSE эквалайзинг")
-        ax1[1, 1].grid()
+        
+
+
         f2, ax2 = plt.subplots(1, 1, figsize=(10, 10))
-        ax2.scatter(y_re_mmse, y_im_mmse, label='MMSE', s=1)
-        ax2.scatter(y_zre, y_zim, color='red', label='ZF', s=1)
-        ax2.scatter(x_re, x_im, color='black', s=10)
+
+
+        ax2.scatter(y_re_mmse, y_im_mmse, label='MMSE', s=1, alpha=0.7)
+        ax2.scatter(y_zre, y_zim, color='red', label='ZF', s=1, alpha=0.7)
+        ax2.scatter(x_re, x_im, color='black', s=10, alpha=0.7)
         ax2.set_xlabel('I')
         ax2.set_ylabel('Q')
         ax2.set_xlabel('I')
@@ -202,22 +217,22 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
         f3, ax3 = plt.subplots(1, 3, figsize=(10, 10))
 
-        ax3[0].scatter(x_re, x_im, color='red', s=100)
-        ax3[0].grid()
+        ax3[0].scatter(x_re, x_im, color='red', s=100,alpha=0.7)
+        
         ax3[0].set_xlabel('I')
         ax3[0].set_ylabel('Q')
         ax3[0].set_title("Исходный сигнал BPSK")
 
-        ax3[1].scatter(y_re, y_im, color='blue', s=1)
-        ax3[1].scatter(x_re, x_im, color='red', s=10)
-        ax3[1].grid()
+        ax3[1].scatter(y_re, y_im, color='blue', s=0.5,alpha=0.7)
+        ax3[1].scatter(x_re, x_im, color='red', s=10,alpha=0.7)
+        
         ax3[1].set_xlabel('I')
         ax3[1].set_ylabel('Q')
         ax3[1].set_title(f"Принятый сигнал, H ={self.H}, SNR = {self.SNR_db} Дб")
 
-        ax3[2].scatter(y_re_mmse, y_im_mmse, label='MMSE', s=1)
-        ax3[2].scatter(y_zre, y_zim, color='red', label='ZF', s=1)
-        ax3[2].scatter(x_re, x_im, color='black', s=10)
+        ax3[2].scatter(y_re_mmse, y_im_mmse, label='MMSE', s=0.5,alpha=0.7)
+        ax3[2].scatter(y_zre, y_zim, color='red', label='ZF', s=0.5,alpha=0.7)
+        ax3[2].scatter(x_re, x_im, color='black', s=10,alpha=0.7)
         ax3[2].set_xlabel('I')
         ax3[2].set_ylabel('Q')
         ax3[2].set_xlabel('I')
@@ -228,7 +243,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
         plt.show()
 
 
-qam_1 = QAM( SNR_db=1, M=16, number_ofdm_symbols=200, number_subcarriers=200)
+qam_1 = QAM( SNR_db=15, M=16, number_ofdm_symbols=200, number_subcarriers=200)
 qam_1.plot()
 # qam_1.modulating()
 # qam_1.ofdm()
