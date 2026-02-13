@@ -14,7 +14,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
         self.SNR_db = SNR_db
         self.SNR = None
         self.x_qam = None
-        self.odfm_matrix = None
+        self.ofdm_matrix = None
         self.y = None
         self.bites_number = None
         self.M = M
@@ -46,11 +46,11 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
     def ofdm(self):
 
-        self.odfm_matrix = self.x_qam.reshape((self.number_ofdm_symbols, self.number_subcarriers))
+        self.ofdm_matrix = self.x_qam.reshape((self.number_ofdm_symbols, self.number_subcarriers))
 
-        self.ofdm_matrix_time = np.fft.ifft(self.odfm_matrix)
+        self.ofdm_matrix_time = np.fft.ifft(self.ofdm_matrix, axis=1)
 
-        print(f'Размерность OFDM матрицы {self.odfm_matrix.shape}')
+        print(f'Размерность OFDM матрицы {self.ofdm_matrix.shape}')
 
 
 
@@ -63,7 +63,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
         signal = set(self.x_qam)
         signal = np.array(list(signal))
 
-        power_x = np.mean(np.abs(signal) ** 2)
+        power_x = np.mean(np.abs(self.x_qam) ** 2)
         SNR = 10 ** (self.SNR_db / 10)
         self.SNR = SNR
         self.power_noise = power_x / SNR
@@ -77,7 +77,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
     def channel_with_noise(self):  # без импульсной характеристики
 
-        self.power()
+
 
         y_time = np.zeros((self.number_ofdm_symbols, self.number_subcarriers), dtype=complex)
 
@@ -90,22 +90,21 @@ class QAM:  # self переменная ссылка на сам класс, г�
         y_time = self.ofdm_matrix_time + noise
 
         self.y_time = y_time
-        self.y = np.fft.fft(y_time.reshape(-1))
+        self.y_freq = np.fft.fft(y_time, axis=1)
+        self.y = self.y_freq.reshape(-1)
 
     def zero_forcing(self):
 
-        y_zf_time = ((np.conjugate(self.H) / (np.abs(self.H)) ** 2)) * self.y_time
+        self.y_zf = ((np.conjugate(self.H) / (np.abs(self.H)) ** 2)) * self.y
 
-        y_zf_matrix = np.fft.fft(y_zf_time)
-        self.y_zf = y_zf_matrix.reshape(-1)
+
 
 
     def mmse(self):
 
-        y_mmse_time = self.y_time * (np.conjugate(self.H) / ((np.abs(self.H)) ** 2 + 1 / self.SNR))
+        self.y_mmse = self.y * (np.conjugate(self.H) / ((np.abs(self.H)) ** 2 + self.power_noise))
 
-        y_mmse_matrix  = np.fft.fft(y_mmse_time)
-        self.y_mmse= y_mmse_matrix.reshape(-1)
+
 
 
 
@@ -121,7 +120,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
         return output_bytes
 
-    def ber(self, dec_bytes):
+    def ber(self, dec_bytes):  # ошиька на бит
 
         count = 0
 
