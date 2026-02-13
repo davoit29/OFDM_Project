@@ -213,7 +213,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
         ax2.set_xlabel('I')
         ax2.set_ylabel('Q')
         ax2.set_title('MMSE и ZF')
-        ax2.legend()
+        ax2.legend(markerscale=5)
 
         f3, ax3 = plt.subplots(1, 3, figsize=(10, 10))
 
@@ -221,7 +221,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
         
         ax3[0].set_xlabel('I')
         ax3[0].set_ylabel('Q')
-        ax3[0].set_title("Исходный сигнал BPSK")
+        ax3[0].set_title("Исходный сигнал QAM")
 
         ax3[1].scatter(y_re, y_im, color='blue', s=0.5,alpha=0.7)
         ax3[1].scatter(x_re, x_im, color='red', s=10,alpha=0.7)
@@ -233,13 +233,14 @@ class QAM:  # self переменная ссылка на сам класс, г�
         ax3[2].scatter(y_re_mmse, y_im_mmse, label='MMSE', s=0.5,alpha=0.7)
         ax3[2].scatter(y_zre, y_zim, color='red', label='ZF', s=0.5,alpha=0.7)
         ax3[2].scatter(x_re, x_im, color='black', s=10,alpha=0.7)
-        ax3[2].set_xlabel('I')
-        ax3[2].set_ylabel('Q')
-        ax3[2].set_xlabel('I')
-        ax3[2].set_ylabel('Q')
-        ax3[2].set_title('MMSE и ZF ')
-        ax3[2].legend()
 
+        ax3[2].set_xlabel('I')
+        ax3[2].set_ylabel('Q')
+        ax3[2].set_xlabel('I')
+        ax3[2].set_ylabel('Q')
+
+        ax3[2].set_title('MMSE и ZF ')
+        ax3[2].legend(markerscale=5)
         plt.show()
 
 
