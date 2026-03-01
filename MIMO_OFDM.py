@@ -21,6 +21,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
         self.x_qam_first = None
         self.x_qam_second = None
+        self.x_qam = None
         self.x_time = None
         self.x_ofdm_tensor = None
         self.qam_matrix_a = None
@@ -37,6 +38,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
         self.x_bytes_a = None
         self.x_bytes_b = None
+        self.x_bytes = None
         self.y_bytes = None
         self.y_zf = None
         self.y_mmse = None
@@ -45,9 +47,22 @@ class QAM:  # self переменная ссылка на сам класс, г�
         self.output_bytes = None
 
 
-        self.h = self.impulse_response()
+
         self.H = None
-        self.h_up = None
+
+        self.h_12= None
+        self.h_11 = None
+        self.h_21 = None
+        self.h_22 = None
+
+
+
+        self.H_11 = None
+        self.H_12 = None
+        self.H_21 = None
+        self.H_22 = None
+
+
 
 
         self.delta_f = 15*10**3  # расстояние между поднесущими
@@ -176,11 +191,15 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
         self.x_bytes_b = np.random.randint(0, 2, self.bites_number)  # мин, макс , размерность массива. рэндинт - целые
 
+        self.x_bytes = np.concatenate((self.x_bytes_a, self.x_bytes_b))
+
         modem = QAMModem(self.M) #модуляция
 
         self.x_qam_first = np.array(modem.modulate(self.x_bytes_a)) # вектор модулированных битов 1 антенны
 
         self.x_qam_second = np.array(modem.modulate(self.x_bytes_b))  # вектор модулированных битов 1 антенны
+
+        self.x_qam  = np.concatenate((self.x_qam_first, self.x_qam_second))
 
         self.qam_matrix_a =np.vstack((self.x_qam_first, self.x_qam_second)) #[[a1,b1],[a2,b2],[]]
         self.qam_matrix_b = np.column_stack((self.x_qam_first, self.x_qam_second))  #[[],[]]
@@ -194,7 +213,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
 
         #  частотнвя характеристику канала
-        self.H = np.fft.fft(self.h, self.number_subcarriers)/(np.sqrt(self.number_subcarriers))
+        # self.H = np.fft.fft(self.h, self.number_subcarriers)/(np.sqrt(self.number_subcarriers))
 
         print(f"Число OFDM символов: {self.number_ofdm_symbols}")
         print(f"Число поднесущих: {self.number_subcarriers}")
@@ -212,11 +231,11 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
         self.x_ofdm_tensor_time =  np.fft.ifft(self.x_ofdm_tensor, axis=1) # матрица офдм во времени, Фурье идет по строчно
 
-         # self.x_time = self.ofdm_matrix_time.flatten()  #  вектор модулированных символов во времени, flatten как решейп -1
+        self.x_time =np.concatenate((self.x_qam_first , self.x_qam_second))   #вектор модулированных символов во времени, flatten как решейп -1
 
         print(2)
 
-        print(f'Размерность OFDM матрицы {self.ofdm_matrix.shape}')
+        print(f'Размерность OFDM матрицы {self.x_ofdm_tensor.shape}')
 
     def power(self):  # нахождение мощности шума через осш в дб
         signal = set(self.x_time)
@@ -235,68 +254,149 @@ class QAM:  # self переменная ссылка на сам класс, г�
         print(f"SNR (линейное): {SNR}")
         print(f"Мощность шума: {self.power_noise}")
 
-    def channel_with_noise(self):  # с учетом импульсной характеристики
+    def channel_with_noise(self):
+
+        self.h_11 = self.impulse_response()
+        self.h_12 = self.impulse_response()
+        self.h_21 = self.impulse_response()
+        self.h_22 = self.impulse_response()
+
+        self.h_11 = np.concatenate((self.h_11,np.zeros(self.number_subcarriers - len(self.h_11), dtype=complex)))
+
+        self.h_12 = np.concatenate((self.h_12,np.zeros(self.number_subcarriers - len(self.h_12), dtype=complex)))
+
+        self.h_21 = np.concatenate((self.h_21,np.zeros(self.number_subcarriers - len(self.h_21), dtype=complex)))
+
+        self.h_22 = np.concatenate((self.h_22,np.zeros(self.number_subcarriers - len(self.h_22), dtype=complex)))
+
+        self.H_11 = np.fft.fft(self.h_11)
+        self.H_12 = np.fft.fft(self.h_12)
+        self.H_21 = np.fft.fft(self.h_21)
+        self.H_22 = np.fft.fft(self.h_22)
+
+        self.H = np.array([
+            [self.H_11, self.H_12],
+            [self.H_21, self.H_22]
+        ])
+
         self.power()
 
-        cp_len = len(self.h) - 1  # длина префикса
+        cp_len = len(self.h_11) - 1
 
-        y_freq = []
+        y_tensor = []
 
-        # цикл по каждому OFDM символу
         for i in range(self.number_ofdm_symbols):
 
-            symbol_time = self.ofdm_matrix_time[i, :]
+            # Берём два передающих вектора одного OFDM символа
+            x1 = self.x_ofdm_tensor_time[i, :, 0]
+            x2 = self.x_ofdm_tensor_time[i, :, 1]
 
-            #  циклический префикс
-            x_cp = np.concatenate((symbol_time[-cp_len:], symbol_time))
+            # Циклический префикс
+            x1_cp = np.concatenate((x1[-cp_len:], x1))
+            x2_cp = np.concatenate((x2[-cp_len:], x2))
 
-            # Свертка
-            res_len = self.number_subcarriers + len(self.h) - 1
+            res_len = self.number_subcarriers + len(self.h_11) - 1
 
-            y_conv = np.zeros(res_len, dtype=complex)
+            y1_conv = np.zeros(res_len, dtype=complex)
+            y2_conv = np.zeros(res_len, dtype=complex)
+
 
             for k in range(res_len):
 
-                y_k = 0
-                m = 0
+                y1_k = 0
+                y2_k = 0
 
-                while k >= m and m <= len(self.h) - 1:
-                    y_k += self.h[m] * x_cp[k - m]
+                m = 0
+                while k >= m and m <= len(self.h_11) - 1:
+                    # y1 = h11*x1 + h12*x2
+                    # y2 = h21*x1 + h22*x2
+                    y1_k += self.h_11[m] * x1_cp[k - m]
+                    y1_k += self.h_12[m] * x2_cp[k - m]
+
+
+                    y2_k += self.h_21[m] * x1_cp[k - m]
+                    y2_k += self.h_22[m] * x2_cp[k - m]
+
                     m += 1
 
-                y_conv[k] = y_k
+                y1_conv[k] = y1_k
+                y2_conv[k] = y2_k
 
-            y_cut = y_conv[cp_len:cp_len+self.number_subcarriers]  # Удаляем cp из- за где межсимвольная интерверенция
 
-            #Добавляем шум
-            noise = (np.random.randn(self.number_subcarriers) + 1j * np.random.randn(
-                self.number_subcarriers)) * np.sqrt(self.power_noise / 2)
-            y_noisy = y_cut + noise
+            # Убираем CP
+            y1_cut = y1_conv[cp_len:cp_len + self.number_subcarriers]
+            y2_cut = y2_conv[cp_len:cp_len + self.number_subcarriers]
 
-            y_freq.append(np.fft.fft(y_noisy)/(np.sqrt(self.number_subcarriers)))  # Переход в частоту
+            # Шум
+            noise1 = (np.random.randn(self.number_subcarriers) +
+                      1j * np.random.randn(self.number_subcarriers)) * np.sqrt(self.power_noise / 2)
 
-        self.y = np.array(y_freq).flatten()
+            noise2 = (np.random.randn(self.number_subcarriers) +
+                      1j * np.random.randn(self.number_subcarriers)) * np.sqrt(self.power_noise / 2)
+
+            y1_noisy = y1_cut + noise1
+            y2_noisy = y2_cut + noise2
+
+            # FFT
+            Y1 = np.fft.fft(y1_noisy)
+            Y2 = np.fft.fft(y2_noisy)
+
+            y_symbol = np.column_stack((Y1, Y2))
+
+            y_tensor.append(y_symbol)
+
+        self.y = np.array(y_tensor)  # (Nsym, Nsub, 2)
+        print(2)
 
 
     def zero_forcing(self):
         #  W = conj(H) / |H|^2
-        W = np.conjugate(self.H) / (np.abs(self.H) ** 2)
 
-        # из плоского вектора в матрицу
-        y_matrix = self.y.reshape((self.number_ofdm_symbols, self.number_subcarriers))
 
-        #  матрицу на вектор W
-        #  обратно в одномерный массив
-        self.y_zf = (y_matrix * W).flatten()
+        x_est = np.zeros((self.number_ofdm_symbols,self.number_subcarriers, 2) , dtype=complex)
+
+        for i in range(self.number_ofdm_symbols):    #Берём один OFDM-символ
+            for k in range(self.number_subcarriers):   # Берём одну поднесущую
+
+
+                Hk = self.H[:, :, k]
+
+                # вектор принятого сигнала
+                yk = self.y[i, k, :]  # размер (2,)
+
+
+
+                # оцениваем переданный вектор
+                x_est[i, k, :] = np.linalg.solve(Hk, yk)
+
+        self.y_zf = x_est.reshape(-1)
+        print("H:", self.H.shape)
+        print("y:", self.y.shape)
 
     def mmse(self):
 
         #  W = conj(H) / (|H|^2 + 1/SNR)
-        W = np.conjugate(self.H) / ((np.abs(self.H)) ** 2 + 1 / self.SNR)
+        # W = np.conjugate(self.H) / ((np.abs(self.H)) ** 2 + 1 / self.SNR)
 
-        y_matrix = self.y.reshape((self.number_ofdm_symbols, self.number_subcarriers))
 
-        self.y_mmse = (y_matrix * W).flatten()
+
+
+        x_est = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
+
+        for i in range( self.number_ofdm_symbols):
+            for k in range(self.number_subcarriers):
+
+                Hk = self.H[:, :, k]
+
+
+                yk = self.y[i, k, :]
+
+                Hh = Hk.conj().T
+                W = np.linalg.inv(Hh @ Hk + self.power_noise * np.eye(2)) @ Hh
+
+                x_est[i, k, :] = W @ yk
+
+        self.y_mmse = x_est.reshape(-1)
 
     def decod(self, output):
 
@@ -310,7 +410,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
         count = np.sum(dec_bytes != self.x_bytes)
 
-        return count / self.bites_number
+        return count /len(self.x_bytes)
 
     def calc_evm_ber_snr(self, snr_range):  # метод вычисления BER и EVM от SNR
         # Списки для MMSE
@@ -395,17 +495,17 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
         x_re = self.x_qam.real
         x_im = self.x_qam.imag
-        y_re = self.y.real
-        y_im = self.y.imag
+        y_re = self.y.flatten().real
+        y_im = self.y.flatten().imag
         y_zre = self.y_zf.real
         y_zim = self.y_zf.imag
         y_re_mmse = self.y_mmse.real
         y_im_mmse = self.y_mmse.imag
 
-        # Фигура 1
+
         f1, ax1 = plt.subplots(2, 2, figsize=(10, 10))
         ax1[0, 0].scatter(x_re, x_im, color='red', s=10)
-        ax1[0, 0].grid();
+        ax1[0, 0].grid()
         ax1[0, 0].set_title("Исходный сигнал")
         ax1[0, 1].scatter(y_re, y_im, s=1, alpha=0.7)
         ax1[0, 1].scatter(x_re, x_im, color='red', alpha=0.7)
@@ -443,10 +543,12 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
 
 
-qam_1 = QAM(SNR_db=15, M=16, number_ofdm_symbols=100, number_subcarriers=7)
+qam_1 = QAM(SNR_db=15, M=16, number_ofdm_symbols=400, number_subcarriers=7)
 # #
-# qam_1.plot()
+qam_1.plot()
 # qam_1.calc_evm_ber_snr(np.arange(-5,25,1))
 # qam_1.time_domain_bandpass()
-qam_1.modulating()
-qam_1.ofdm()
+# qam_1.modulating()
+# qam_1.ofdm()
+# qam_1.channel_with_noise()
+# qam_1.zero_forcing()
