@@ -5,10 +5,7 @@ import time
 from commpy.modulation import QAMModem
 
 
-
-
-class QAM:  # self переменная ссылка на сам класс, глобализирует переменные
-
+class QAM:
     def __init__(self, SNR_db, M, number_ofdm_symbols, number_subcarriers):
         self.number_subcarriers = number_subcarriers
         self.number_ofdm_symbols = number_ofdm_symbols
@@ -22,6 +19,7 @@ class QAM:  # self переменная ссылка на сам класс, г�
         self.x_qam = None
         self.x_time = None
         self.x_ofdm_tensor = None
+        self.x_ofdm_tensor_time = None
         self.qam_matrix_a = None
         self.qam_matrix_b = None
 
@@ -61,47 +59,40 @@ class QAM:  # self переменная ссылка на сам класс, г�
         self.fc = 300 * 10 ** 3
 
     def time_domain_bandpass(self):
-
         self.modulating()
         self.ofdm()
 
         T_symbol = 1 / self.delta_f  # Длительность одного OFDM символа
-
         dt = 1 / self.Fs  # шаг дискретизации
-
         t_symbol = np.arange(0, T_symbol, dt)
 
-        #  сигнал
+        # поднесущие вокруг fc
+        f_n = np.linspace(self.fc - (self.number_subcarriers // 2) * self.delta_f,
+                          self.fc + (self.number_subcarriers // 2) * self.delta_f,
+                          self.number_subcarriers)
 
         s = []
-
-        # поднесущие  вокруг fc
-        f_n = np.linspace(self.fc - (self.number_subcarriers // 2) * self.delta_f,
-                          self.fc + (self.number_subcarriers // 2) * self.delta_f, self.number_subcarriers)
-
         for k in range(self.number_ofdm_symbols):
-            # Создаем временной сигнал для одного символа
-
-            s_symbol = np.zeros(len(t_symbol))
+            s_symbol = np.zeros(len(t_symbol), dtype=complex)
 
             for n in range(self.number_subcarriers):
-                s_symbol += np.real(
-                    self.ofdm_matrix[k, n] * np.exp(1j * 2 * np.pi * f_n[n] * t_symbol)
-                )
+                # Для каждой антенны
+                for ant in range(2):
+                    s_symbol += self.x_ofdm_tensor_time[k, n, ant] * \
+                                np.exp(1j * 2 * np.pi * f_n[n] * t_symbol)
 
-            s.extend(s_symbol)
+            s.extend(s_symbol.real)  # Берем действительную часть
 
         s = np.array(s)
-
         t_total = np.arange(len(s)) * dt
 
         print(f'Общее время симуляции: {t_total[-1] * 1e6:.2f} мкс')
 
         plt.figure(figsize=(12, 6))
         plt.plot(t_total * 1e6, s, lw=0.7, color="red")
-        plt.title(f'Полосовой OFDM сигнал ')
+        plt.title(f'Полосовой OFDM сигнал')
         plt.xlabel("Время, мкс")
-        plt.ylabel("Амплитуда ")
+        plt.ylabel("Амплитуда")
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         plt.show()
@@ -160,73 +151,52 @@ class QAM:  # self переменная ссылка на сам класс, г�
 
         return h
 
+
     def modulating(self):
-        bites_number = int(self.number_subcarriers * np.log2(self.M) * self.number_ofdm_symbols)
-
-        self.bites_number = bites_number * 2
-
-        self.norm = np.sqrt(self.number_subcarriers)
-
         bites_per_antenna = self.number_subcarriers * self.number_ofdm_symbols * int(np.log2(self.M))
+
         self.x_bytes_a = np.random.randint(0, 2, bites_per_antenna)
         self.x_bytes_b = np.random.randint(0, 2, bites_per_antenna)
-
         self.x_bytes = np.concatenate((self.x_bytes_a, self.x_bytes_b))
 
-        modem = QAMModem(self.M)  # модуляция
+        modem = QAMModem(self.M)
 
-        self.x_qam_first = np.array(modem.modulate(self.x_bytes_a))  # вектор модулированных битов 1 антенны
-
-        self.x_qam_second = np.array(modem.modulate(self.x_bytes_b))  # вектор модулированных битов 1 антенны
+        self.x_qam_first = np.array(modem.modulate(self.x_bytes_a))
+        self.x_qam_second = np.array(modem.modulate(self.x_bytes_b))
 
         self.x_qam = np.concatenate((self.x_qam_first, self.x_qam_second))
 
-        self.qam_matrix_a = np.vstack((self.x_qam_first, self.x_qam_second))  # [[a1,b1],[a2,b2],[]]
-        self.qam_matrix_b = np.column_stack((self.x_qam_first, self.x_qam_second))  # [[],[]]
-
-        print(2)
-
-        #  частотнвя характеристику канала
-        # self.H = np.fft.fft(self.h, self.number_subcarriers)/(np.sqrt(self.number_subcarriers))
+        self.qam_matrix_a = np.vstack((self.x_qam_first, self.x_qam_second))
+        self.qam_matrix_b = np.column_stack((self.x_qam_first, self.x_qam_second))
 
         print(f"Число OFDM символов: {self.number_ofdm_symbols}")
         print(f"Число поднесущих: {self.number_subcarriers}")
-        # print(f"Всего QAM символов: {len(self.x_qam)}")
 
     def ofdm(self):
-
+        # Создаем тензор (символы, поднесущие, антенны)
         self.x_ofdm_tensor = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
 
+        # Заполняем данными
         self.x_ofdm_tensor[:, :, 0] = self.x_qam_first.reshape(self.number_ofdm_symbols, self.number_subcarriers)
         self.x_ofdm_tensor[:, :, 1] = self.x_qam_second.reshape(self.number_ofdm_symbols, self.number_subcarriers)
 
-        self.x_qam = self.x_ofdm_tensor.transpose(2, 0, 1).reshape(-1)
-
-        self.x_ofdm_tensor_time = np.fft.ifft(self.x_ofdm_tensor, axis=1)
+        # IFFT по измерению поднесущих
+        self.x_ofdm_tensor_time = np.fft.ifft(self.x_ofdm_tensor, axis=1) * np.sqrt(self.number_subcarriers)
 
         self.x_time = self.x_ofdm_tensor_time.flatten()
 
-        print(2)
+        print(f'Размерность OFDM тензора: {self.x_ofdm_tensor.shape}')
 
-        print(f'Размерность OFDM матрицы {self.x_ofdm_tensor.shape}')
-
-    def power(self):  # нахождение мощности шума через осш в дб
-        signal = set(self.x_time)
-        signal = np.array(list(signal))
-
-        power_x = np.mean(np.abs(self.x_ofdm_tensor_time.flatten()) ** 2)
-
+    def power(self):
         power_freq = np.mean(np.abs(self.x_ofdm_tensor.flatten()) ** 2)
-
 
         SNR = 10 ** (self.SNR_db / 10)
 
         self.SNR = SNR
         self.power_noise_freq = power_freq / SNR
+        self.power_noise = self.power_noise_freq  # Во временной области та же мощность
 
-        self.power_noise = power_x / SNR
-
-        print(f"Мощность сигнала: {power_x}")
+        print(f"Мощность сигнала в частотной области: {power_freq}")
         print(f"SNR (линейное): {SNR}")
         print(f"Мощность шума: {self.power_noise}")
 
@@ -312,226 +282,241 @@ class QAM:  # self переменная ссылка на сам класс, г�
             y2_noisy = y2_cut + noise2
 
             # FFT
-            Y1 = np.fft.fft(y1_noisy)
-            Y2 = np.fft.fft(y2_noisy)
+            Y1 = np.fft.fft(y1_noisy) / np.sqrt(self.number_subcarriers)
+            Y2 = np.fft.fft(y2_noisy) / np.sqrt(self.number_subcarriers)
 
             y_symbol = np.column_stack((Y1, Y2))
 
             y_tensor.append(y_symbol)
 
         self.y = np.array(y_tensor)  # (Nsym, Nsub, 2)
-        print(2)
+
 
     def zero_forcing(self):
-        #  W = conj(H) / |H|^2
-
-        # (Nsub,2,2)
-        #  W = conj(H) / |H|^2
-
-        x_est = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
-
-        for i in range(self.number_ofdm_symbols):  # Берём один OFDM-символ
-            for k in range(self.number_subcarriers):  # Берём одну поднесущую
-
-                Hk = self.H[:, :, k]
-
-                # вектор принятого сигнала
-                yk = self.y[i, k, :]  # размер (2,)
-
-                # оцениваем переданный вектор
-                x_est[i, k, :] = np.linalg.solve(Hk, yk)
-
-        self.y_zf = x_est.transpose(2, 0, 1).reshape(-1)
-        print("H:", self.H.shape)
-        print("y:", self.y.shape)
-
-    def mmse(self):
-
-        #  W = conj(H) / (|H|^2 + 1/SNR)
-        # W = np.conjugate(self.H) / ((np.abs(self.H)) ** 2 + 1 / self.SNR)
-
         x_est = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
 
         for i in range(self.number_ofdm_symbols):
             for k in range(self.number_subcarriers):
                 Hk = self.H[:, :, k]
-
                 yk = self.y[i, k, :]
 
-                Hh = Hk.conj().T
-                W = np.linalg.inv(Hh @ Hk + (1/self.SNR) * np.eye(2)) @ Hh
+                # Решаем систему Hk * x = yk
+                try:
+                    x_est[i, k, :] = np.linalg.solve(Hk, yk)
+                except np.linalg.LinAlgError:
+                    # Если матрица вырожденная, используем псевдообратную
+                    x_est[i, k, :] = np.linalg.pinv(Hk) @ yk
 
+        self.y_zf = x_est.transpose(2, 0, 1).reshape(-1)
+
+    def mmse(self):
+        x_est = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
+
+        for i in range(self.number_ofdm_symbols):
+            for k in range(self.number_subcarriers):
+                Hk = self.H[:, :, k]
+                yk = self.y[i, k, :]
+
+                # MMSE фильтр
+                Hh = Hk.conj().T
+                Sn = (1 / self.SNR) * np.eye(2)  # Предполагаем единичную мощность сигнала
+
+                W = np.linalg.inv(Hh @ Hk + Sn) @ Hh
                 x_est[i, k, :] = W @ yk
 
         self.y_mmse = x_est.transpose(2, 0, 1).reshape(-1)
 
     def decod(self, output):
-
         modem = QAMModem(self.M)
-
         output_bytes = modem.demodulate(output, demod_type='hard')
-
         return np.array(output_bytes)
 
+    def ber(self, dec_bytes, num_err=0, num_bits=0, key='mmse', max_recursion=10):
+        """
+        Вычисление BER с накоплением до 100 ошибок (рекурсивно)
 
+        Parameters:
+        -----------
+        dec_bytes : array
+            Демодулированные биты для текущей итерации
+        num_err : int
+            Текущее количество накопленных ошибок
+        num_bits : int
+            Текущее количество накопленных бит
+        key : str
+            Тип эквалайзера ('mmse' или 'zf')
+        max_recursion : int
+            Максимальная глубина рекурсии
 
+        Returns:
+        --------
+        tuple : (num_err, num_bits) - накопленные ошибки и биты
+        """
 
+        print(f"  BER calculation for {key}, current stats: {num_err} errors / {num_bits} bits")
 
-    def ber_until_100(self, snr):
+        while num_err <= 100:
+            # Сравниваем текущие биты
+            N = min(len(self.x_bytes), len(dec_bytes))
+            errors = np.count_nonzero(self.x_bytes[:N] != dec_bytes[:N])
 
-        errors_zf = 0
-        errors_mmse = 0
+            num_err += errors
+            num_bits += N
 
-        bits_zf = 0
-        bits_mmse = 0
+            print(f"    Found {errors} errors in {N} bits, total: {num_err}/{num_bits}")
 
-        evm_zf_list = []
-        evm_mmse_list = []
+            if num_err > 100:
+                print(f"    Reached 100 errors! Final stats: {num_err}/{num_bits}")
+                return num_err, num_bits
 
-        self.SNR_db = snr
+            if num_err <= 100:
+                print(f"  Need more errors, running new simulation with {key} equalizer...")
 
-        while errors_zf < 100 or errors_mmse < 100:
+                # СОХРАНЯЕМ ТЕКУЩЕЕ СОСТОЯНИЕ
+                old_state = {
+                    'x_bytes': self.x_bytes.copy() if self.x_bytes is not None else None,
+                    'x_bytes_a': self.x_bytes_a.copy() if self.x_bytes_a is not None else None,
+                    'x_bytes_b': self.x_bytes_b.copy() if self.x_bytes_b is not None else None,
+                    'x_qam_first': self.x_qam_first.copy() if self.x_qam_first is not None else None,
+                    'x_qam_second': self.x_qam_second.copy() if self.x_qam_second is not None else None,
+                    'x_qam': self.x_qam.copy() if self.x_qam is not None else None,
+                    'x_ofdm_tensor': self.x_ofdm_tensor.copy() if self.x_ofdm_tensor is not None else None,
+                    'x_ofdm_tensor_time': self.x_ofdm_tensor_time.copy() if self.x_ofdm_tensor_time is not None else None,
+                    'y': self.y.copy() if self.y is not None else None,
+                    'y_mmse': self.y_mmse.copy() if self.y_mmse is not None else None,
+                    'y_zf': self.y_zf.copy() if self.y_zf is not None else None,
+                    'H': self.H.copy() if self.H is not None else None
+                }
 
-            #запуск симуляции
+                try:
+                    # Генерируем новые случайные биты
+                    bites_per_antenna = self.number_subcarriers * self.number_ofdm_symbols * int(np.log2(self.M))
+                    self.x_bytes_a = np.random.randint(0, 2, bites_per_antenna)
+                    self.x_bytes_b = np.random.randint(0, 2, bites_per_antenna)
+                    self.x_bytes = np.concatenate((self.x_bytes_a, self.x_bytes_b))
 
-            self.modulating()
-            self.ofdm()
-            self.channel_with_noise()
+                    # Модуляция
+                    modem = QAMModem(self.M)
+                    self.x_qam_first = np.array(modem.modulate(self.x_bytes_a))
+                    self.x_qam_second = np.array(modem.modulate(self.x_bytes_b))
+                    self.x_qam = np.concatenate((self.x_qam_first, self.x_qam_second))
 
-            self.zero_forcing()
-            self.mmse()
+                    # OFDM
+                    self.x_ofdm_tensor = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
+                    self.x_ofdm_tensor[:, :, 0] = self.x_qam_first.reshape(self.number_ofdm_symbols,
+                                                                           self.number_subcarriers)
+                    self.x_ofdm_tensor[:, :, 1] = self.x_qam_second.reshape(self.number_ofdm_symbols,
+                                                                            self.number_subcarriers)
+                    self.x_ofdm_tensor_time = np.fft.ifft(self.x_ofdm_tensor, axis=1) * np.sqrt(self.number_subcarriers)
 
-            dec_zf = self.decod(self.y_zf)
-            dec_mmse = self.decod(self.y_mmse)
+                    # Канал с шумом
+                    self.channel_with_noise()
 
-            err_zf = np.count_nonzero(self.x_bytes != dec_zf)
-            err_mmse = np.count_nonzero(self.x_bytes != dec_mmse)
+                    # Применяем соответствующий эквалайзер
+                    if key == 'mmse':
+                        self.mmse()
+                        new_dec = self.decod(self.y_mmse)
+                    else:  # zf
+                        self.zero_forcing()
+                        new_dec = self.decod(self.y_zf)
 
-            # EVM
-            evm_zf = np.mean(np.abs(self.y_zf - self.x_qam) ** 2)
-            evm_mmse = np.mean(np.abs(self.y_mmse - self.x_qam) ** 2)
+                    # Рекурсивный вызов
+                    return self.ber(new_dec, num_err, num_bits, key, max_recursion)
 
-            evm_zf_list.append(evm_zf)
-            evm_mmse_list.append(evm_mmse)
+                finally:
+                    # ВОССТАНАВЛИВАЕМ СОСТОЯНИЕ
+                    for attr, value in old_state.items():
+                        if value is not None:
+                            setattr(self, attr, value)
 
-            #поиск ошибки
+        return num_err, num_bits
 
-            if errors_zf < 100:
-                errors_zf += err_zf
-                bits_zf += self.x_bytes.size
-
-            if errors_mmse < 100:
-                errors_mmse += err_mmse
-                bits_mmse += self.x_bytes.size
-
-        ber_zf = errors_zf / bits_zf
-        ber_mmse = errors_mmse / bits_mmse
-
-        return ber_zf, ber_mmse, np.mean(evm_zf_list), np.mean(evm_mmse_list)
-    def ber_frame(self):
-
-        self.modulating()
-        self.ofdm()
-        self.channel_with_noise()
-
-        self.zero_forcing()
-        self.mmse()
-
-        dec_zf = self.decod(self.y_zf)
-        dec_mmse = self.decod(self.y_mmse)
-
-        ber_zf = np.count_nonzero(self.x_bytes != dec_zf) / self.x_bytes.size
-        ber_mmse = np.count_nonzero(self.x_bytes != dec_mmse) / self.x_bytes.size
-
-        return ber_zf, ber_mmse
-
-    def ber_100_plot(self, snr_range):
-
-        ber_zf = []
-        ber_mmse = []
-
-        for snr in snr_range:
-            zf, mmse = self.ber_until_100(snr)
-
-            ber_zf.append(zf)
-            ber_mmse.append(mmse)
-
-            print(f"SNR {snr} dB | ZF {zf:.5e} | MMSE {mmse:.5e}")
-
-        plt.figure(figsize=(8, 6))
-
-        plt.semilogy(snr_range, ber_zf, label="ZF")
-        plt.semilogy(snr_range, ber_mmse, label="MMSE")
-
-        plt.xlabel("SNR (dB)")
-        plt.ylabel("BER")
-        plt.title("BER (100 errors method)")
-        plt.grid(True, which="both")
-        plt.legend()
-
-        plt.show()
-
-    def ber_100_avg_plot(self, snr_range, n_iter):
-
-        ber_zf_avg = []
+    def calc_evm_ber_snr_avg(self, snr_range, n_iter):
         ber_mmse_avg = []
-
-        evm_zf_avg = []
         evm_mmse_avg = []
+        ber_zf_avg = []
+        evm_zf_avg = []
+
+        original_snr = self.SNR_db
 
         for snr in snr_range:
-
-            ber_zf_iter = []
-            ber_mmse_iter = []
-
-            evm_zf_iter = []
-            evm_mmse_iter = []
+            ber_mmse_list = []
+            evm_mmse_list = []
+            ber_zf_list = []
+            evm_zf_list = []
 
             for _ in range(n_iter):
-                zf, mmse, evm_zf, evm_mmse = self.ber_until_100(snr)
+                self.SNR_db = snr
 
-                ber_zf_iter.append(zf)
-                ber_mmse_iter.append(mmse)
+                self.modulating()
+                self.ofdm()
+                self.channel_with_noise()
 
-                evm_zf_iter.append(evm_zf)
-                evm_mmse_iter.append(evm_mmse)
+                self.mmse()
+                self.zero_forcing()
 
-            ber_zf_avg.append(np.mean(ber_zf_iter))
-            ber_mmse_avg.append(np.mean(ber_mmse_iter))
+                # Демодуляция
+                dec_mmse = self.decod(self.y_mmse)
+                dec_zf = self.decod(self.y_zf)
 
-            evm_zf_avg.append(np.mean(evm_zf_iter))
-            evm_mmse_avg.append(np.mean(evm_mmse_iter))
+                # BER с накоплением до 100 ошибок для MMSE
+                num_err_mmse, num_bits_mmse = self.ber(dec_mmse, num_err=0, num_bits=0, key='mmse', max_recursion=5)
+                ber_mmse = num_err_mmse / num_bits_mmse if num_bits_mmse > 0 else 1.0
+                ber_mmse_list.append(ber_mmse)
 
-            print(
-                f"SNR {snr} | ZF {np.mean(ber_zf_iter):.3e} | MMSE {np.mean(ber_mmse_iter):.3e}"
-            )
+                # BER с накоплением до 100 ошибок для ZF
+                num_err_zf, num_bits_zf = self.ber(dec_zf, num_err=0, num_bits=0, key='zf', max_recursion=5)
+                ber_zf = num_err_zf / num_bits_zf if num_bits_zf > 0 else 1.0
+                ber_zf_list.append(ber_zf)
 
-        plt.figure(figsize=(12, 5))
+                # EVM (оставляем как есть)
+                signal_power = np.mean(np.abs(self.x_qam) ** 2)
+                evm_mmse = np.sqrt(np.mean(np.abs(self.y_mmse - self.x_qam) ** 2) / signal_power)
+                evm_zf = np.sqrt(np.mean(np.abs(self.y_zf - self.x_qam) ** 2) / signal_power)
 
-        # BER
+                evm_mmse_list.append(evm_mmse)
+                evm_zf_list.append(evm_zf)
+
+            ber_mmse_avg.append(np.mean(ber_mmse_list))
+            ber_zf_avg.append(np.mean(ber_zf_list))
+            evm_mmse_avg.append(np.mean(evm_mmse_list))
+            evm_zf_avg.append(np.mean(evm_zf_list))
+
+            print(f"SNR = {snr} dB: BER_MMSE = {ber_mmse_avg[-1]:.6f}, BER_ZF = {ber_zf_avg[-1]:.6f}")
+
+        self.SNR_db = original_snr
+
+        # Графики строятся так же
+        plt.figure(figsize=(14, 5))
+
         plt.subplot(1, 2, 1)
-        plt.semilogy(snr_range, ber_zf_avg, label="ZF")
-        plt.semilogy(snr_range, ber_mmse_avg, label="MMSE")
-        plt.xlabel("SNR (dB)")
-        plt.ylabel("BER")
-        plt.title("BER ")
-        plt.grid(True, which="both")
-        plt.legend()
+        ber_zf_plot = np.maximum(ber_zf_avg, 1e-6)
+        ber_mmse_plot = np.maximum(ber_mmse_avg, 1e-6)
 
-        # EVM
+        plt.semilogy(snr_range, ber_zf_plot, 'o-', label="ZF", linewidth=2, markersize=8)
+        plt.semilogy(snr_range, ber_mmse_plot, 's-', label="MMSE", linewidth=2, markersize=8)
+        plt.xlabel("SNR (dB)", fontsize=12)
+        plt.ylabel("BER", fontsize=12)
+        plt.title("BER vs SNR", fontsize=14)
+        plt.ylim(1e-4, 1)
+        plt.grid(True, which="both", ls="--", alpha=0.6)
+        plt.legend(fontsize=12)
+
         plt.subplot(1, 2, 2)
-        plt.semilogy(snr_range, evm_zf_avg, label="ZF")
-        plt.semilogy(snr_range, evm_mmse_avg, label="MMSE")
-        plt.xlabel("SNR (dB)")
-        plt.ylabel("EVM")
-        plt.title("EVM ")
-        plt.grid(True, which="both")
-        plt.legend()
+        plt.semilogy(snr_range, evm_zf_avg, 'o-', label="ZF", linewidth=2, markersize=8)
+        plt.semilogy(snr_range, evm_mmse_avg, 's-', label="MMSE", linewidth=2, markersize=8)
+        plt.xlabel("SNR (dB)", fontsize=12)
+        plt.ylabel("Нормированная EVM", fontsize=12)
+        plt.title("EVM vs SNR", fontsize=14)
+        plt.grid(True, which="both", ls="--", alpha=0.6)
+        plt.legend(fontsize=12)
 
         plt.tight_layout()
         plt.show()
+
+        return ber_zf_avg, ber_mmse_avg, evm_zf_avg, evm_mmse_avg
+
     def plot(self):
-        # вызываем прошлые методы
         self.modulating()
         self.ofdm()
         self.channel_with_noise()
@@ -555,64 +540,68 @@ class QAM:  # self переменная ссылка на сам класс, г�
         y_re_mmse = self.y_mmse.real
         y_im_mmse = self.y_mmse.imag
 
-        f1, ax1 = plt.subplots(2, 2, figsize=(10, 10))
-        ax1[0, 0].scatter(x_re, x_im, color='red', s=10)
-        ax1[0, 0].grid()
-        ax1[0, 0].set_title("Исходный сигнал")
-        ax1[0, 1].scatter(y_re, y_im, s=1, alpha=0.7)
-        ax1[0, 1].scatter(x_re, x_im, color='red', alpha=0.7)
-        ax1[0, 1].set_title("Принятый сигнал")
-        ax1[1, 0].scatter(y_zre, y_zim, s=1, alpha=0.7)
-        ax1[1, 0].scatter(x_re, x_im, color='red', alpha=0.7)
-        ax1[1, 0].set_title("ZF эквалайзинг")
-        ax1[1, 1].scatter(y_re_mmse, y_im_mmse, s=1, alpha=0.7)
-        ax1[1, 1].scatter(x_re, x_im, color='red', alpha=0.7)
-        ax1[1, 1].set_title("MMSE эквалайзинг")
+        fig, axes = plt.subplots(2, 2, figsize=(12, 12))
 
-        #
-        f2, ax2 = plt.subplots(1, 1, figsize=(8, 8))
-        ax2.scatter(y_re_mmse, y_im_mmse, label='MMSE', s=5, alpha=0.7)
-        ax2.scatter(y_zre, y_zim, color='red', label='ZF', s=5, alpha=0.7)
-        ax2.scatter(x_re, x_im, color='black', s=10, alpha=0.7)
-        ax2.set_title('MMSE и ZF');
-        ax2.legend(markerscale=10)
+        axes[0, 0].scatter(x_re, x_im, color='red', s=20, alpha=0.7)
+        axes[0, 0].grid(True, alpha=0.3)
+        axes[0, 0].set_title("Исходный сигнал QAM", fontsize=12)
+        axes[0, 0].set_xlabel("In-Phase")
+        axes[0, 0].set_ylabel("Quadrature")
 
-        #
-        f3, ax3 = plt.subplots(1, 3, figsize=(15, 5))
-        ax3[0].scatter(x_re, x_im, color='red', s=100, alpha=0.7)
-        ax3[0].set_title("Исходный сигнал QAM")
-        ax3[1].scatter(y_re, y_im, color='blue', s=0.5, alpha=0.7)
-        ax3[1].scatter(x_re, x_im, color='red', s=10, alpha=0.7)
-        ax3[1].set_title(f"Принятый сигнал, SNR = {self.SNR_db} Дб")
-        ax3[2].scatter(y_re_mmse, y_im_mmse, label='MMSE', s=0.5, alpha=1)
-        ax3[2].scatter(y_zre, y_zim, color='red', label='ZF', s=0.5, alpha=1)
-        ax3[2].scatter(x_re, x_im, color='black', s=10, alpha=1)
-        ax3[2].set_title('MMSE и ZF ')
-        ax3[2].legend(markerscale=5)
-        ax3[2].set_xlim(-10, 10)
-        ax3[2].set_ylim(-10, 10)
+        axes[0, 1].scatter(y_re, y_im, s=5, alpha=0.5, label='Принятый')
+        axes[0, 1].scatter(x_re, x_im, color='red', s=20, alpha=0.7, label='Исходный')
+        axes[0, 1].grid(True, alpha=0.3)
+        axes[0, 1].set_title(f"Принятый сигнал (SNR = {self.SNR_db} dB)", fontsize=12)
+        axes[0, 1].set_xlabel("In-Phase")
+        axes[0, 1].set_ylabel("Quadrature")
+        axes[0, 1].legend()
+
+        axes[1, 0].scatter(y_zre, y_zim, s=5, alpha=0.5, label='ZF')
+        axes[1, 0].scatter(x_re, x_im, color='red', s=20, alpha=0.7, label='Исходный')
+        axes[1, 0].grid(True, alpha=0.3)
+        axes[1, 0].set_title("ZF эквалайзинг", fontsize=12)
+        axes[1, 0].set_xlabel("In-Phase")
+        axes[1, 0].set_ylabel("Quadrature")
+        axes[1, 0].legend()
+
+        axes[1, 1].scatter(y_re_mmse, y_im_mmse, s=5, alpha=0.5, label='MMSE')
+        axes[1, 1].scatter(x_re, x_im, color='red', s=20, alpha=0.7, label='Исходный')
+        axes[1, 1].grid(True, alpha=0.3)
+        axes[1, 1].set_title("MMSE эквалайзинг", fontsize=12)
+        axes[1, 1].set_xlabel("In-Phase")
+        axes[1, 1].set_ylabel("Quadrature")
+        axes[1, 1].legend()
+
+        plt.tight_layout()
+        plt.show()
+
+        fig2, ax2 = plt.subplots(1, 1, figsize=(10, 10))
+        ax2.scatter(y_re_mmse, y_im_mmse, label='MMSE', s=10, alpha=0.6)
+        ax2.scatter(y_zre, y_zim, color='red', label='ZF', s=10, alpha=0.6)
+        ax2.scatter(x_re, x_im, color='black', s=50, alpha=0.8, marker='x', label='Исходный')
+        ax2.set_title('Сравнение MMSE и ZF', fontsize=14)
+        ax2.set_xlabel("In-Phase")
+        ax2.set_ylabel("Quadrature")
+        ax2.legend(fontsize=12)
+        ax2.grid(True, alpha=0.3)
+        ax2.set_xlim(-1.5, 1.5)
+        ax2.set_ylim(-1.5, 1.5)
+        plt.tight_layout()
         plt.show()
 
 
+# Тестирование
+if __name__ == "__main__":
+    qam_1 = QAM(SNR_db=15, M=4, number_ofdm_symbols=400, number_subcarriers=7)
 
+    # Быстрый тест с графиками
+    # qam_1.plot()
 
-qam_1 = QAM(SNR_db=15, M=16, number_ofdm_symbols=400, number_subcarriers=7)
-# #
-# qam_1.plot()
-# qam_1.calc_evm_ber_snr(np.arange(0,25,1))
-# qam_1.time_domain_bandpass()
-# qam_1.modulating()
-# qam_1.ofdm()
-# qam_1.channel_with_noise()
-# qam_1.zero_forcing()
-# start = time.perf_counter()
+    # Тест зависимости BER от SNR
+    qam_1.calc_evm_ber_snr_avg(
+        snr_range=np.arange(0, 20, 3),
+        n_iter=10
+    )
 
-#
-qam_1.ber_100_avg_plot(
-    snr_range=np.arange(0,45,3),
-    n_iter=10
-)
-
-# end = time.perf_counter()
-
-# print(f"Время: {end-start:.4f} сек")
+    # Демонстрация временного сигнала
+    # qam_1.time_domain_bandpass()
