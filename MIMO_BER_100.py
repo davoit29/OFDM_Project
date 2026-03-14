@@ -592,7 +592,7 @@ class QAM:
 
 # Тестирование
 if __name__ == "__main__":
-    qam_1 = QAM(SNR_db=15, M=4, number_ofdm_symbols=400, number_subcarriers=7)
+    qam_1 = QAM(SNR_db=15, M=16, number_ofdm_symbols=400, number_subcarriers=7)
 
     # Быстрый тест с графиками
     # qam_1.plot()
