@@ -217,7 +217,7 @@ class QAM:
         bits_zf_cod, bits_mmse_cod = 0, 0
 
         evm_zf_unc_list, evm_mmse_unc_list = [], []
-        evm_zf_cod_list, evm_mmse_cod_list = [], []
+
 
         self.SNR_db = snr
         max_iters = 100  # Предохранитель, если с кодированием ошибок нет вообще
@@ -248,8 +248,7 @@ class QAM:
             # EVM
             evm_zf_unc_list.append(np.mean(np.abs(self.y_zf_unc - self.x_qam_unc) ** 2))
             evm_mmse_unc_list.append(np.mean(np.abs(self.y_mmse_unc - self.x_qam_unc) ** 2))
-            evm_zf_cod_list.append(np.mean(np.abs(self.y_zf_cod - self.x_qam_cod) ** 2))
-            evm_mmse_cod_list.append(np.mean(np.abs(self.y_mmse_cod - self.x_qam_cod) ** 2))
+
 
             if errors_zf_unc < 100:
                 errors_zf_unc += err_zf_unc
@@ -269,18 +268,18 @@ class QAM:
         ber_mmse_cod = errors_mmse_cod / bits_mmse_cod if bits_mmse_cod > 0 else 0
 
         return ber_zf_unc, ber_mmse_unc, ber_zf_cod, ber_mmse_cod, \
-            np.mean(evm_zf_unc_list), np.mean(evm_mmse_unc_list), \
-            np.mean(evm_zf_cod_list), np.mean(evm_mmse_cod_list)
+            np.mean(evm_zf_unc_list), np.mean(evm_mmse_unc_list)
+
 
     def ber_100_avg_plot(self, snr_range, n_iter):
         ber_zf_unc_avg, ber_mmse_unc_avg = [], []
         ber_zf_cod_avg, ber_mmse_cod_avg = [], []
         evm_zf_unc_avg, evm_mmse_unc_avg = [], []
-        evm_zf_cod_avg, evm_mmse_cod_avg = [], []
+
 
         for snr in snr_range:
             b_zu, b_mu, b_zc, b_mc = [], [], [], []
-            e_zu, e_mu, e_zc, e_mc = [], [], [], []
+            e_zu, e_mu = [], []
 
             for _ in range(n_iter):
                 res = self.ber_until_100(snr)
@@ -290,8 +289,7 @@ class QAM:
                 b_mc.append(res[3])
                 e_zu.append(res[4]);
                 e_mu.append(res[5])
-                e_zc.append(res[6]);
-                e_mc.append(res[7])
+
 
             ber_zf_unc_avg.append(np.mean(b_zu))
             ber_mmse_unc_avg.append(np.mean(b_mu))
@@ -300,8 +298,7 @@ class QAM:
 
             evm_zf_unc_avg.append(np.mean(e_zu))
             evm_mmse_unc_avg.append(np.mean(e_mu))
-            evm_zf_cod_avg.append(np.mean(e_zc))
-            evm_mmse_cod_avg.append(np.mean(e_mc))
+
 
             print(
                 f"SNR {snr:2d} | ZF Uncoded: {np.mean(b_zu):.3e} | ZF Coded: {np.mean(b_zc):.3e} || MMSE Uncoded: {np.mean(b_mu):.3e} | MMSE Coded: {np.mean(b_mc):.3e}")
@@ -316,7 +313,7 @@ class QAM:
         plt.semilogy(snr_range, ber_mmse_cod_avg, '--', label="MMSE (Viterbi)", color='orange')
         plt.xlabel("SNR (dB)")
         plt.ylabel("BER")
-        plt.title("BER Comparison")
+
         plt.grid(True, which="both", linestyle='--', alpha=0.6)
         plt.legend()
 
@@ -324,11 +321,10 @@ class QAM:
         plt.subplot(1, 2, 2)
         plt.semilogy(snr_range, evm_zf_unc_avg, '-', label="ZF", color='blue')
         plt.semilogy(snr_range, evm_mmse_unc_avg, '-', label="MMSE", color='orange')
-        plt.semilogy(snr_range, evm_zf_cod_avg, '--', label="ZF (Viterbi)", color='blue', alpha=0.5)
-        plt.semilogy(snr_range, evm_mmse_cod_avg, '--', label="MMSE (Viterbi)", color='orange', alpha=0.5)
+
         plt.xlabel("SNR (dB)")
         plt.ylabel("EVM")
-        plt.title("EVM Comparison")
+
         plt.grid(True, which="both", linestyle='--', alpha=0.6)
         plt.legend()
 
@@ -338,10 +334,10 @@ class QAM:
 
 # Запуск
 if __name__ == "__main__":
-    qam_1 = QAM(SNR_db=15, M=16, number_ofdm_symbols=400, number_subcarriers=7)
+    qam_1 = QAM(SNR_db=15, M=16, number_ofdm_symbols=40, number_subcarriers=7)
 
     # Запускаем симуляцию
     qam_1.ber_100_avg_plot(
-        snr_range=np.arange(0,25, 3),
-        n_iter=100
+        snr_range=np.arange(0,30, 1),
+        n_iter=10
     )
