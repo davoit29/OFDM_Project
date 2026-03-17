@@ -14,7 +14,7 @@ class QAM:
         self.SNR_db = SNR_db
         self.SNR = None
 
-        # Инициализация кодека Витерби (Rate 1/2)
+        #  Витерби  1/2
         self.codec = Viterbi(7, [0o133, 0o171])
 
 
@@ -51,13 +51,13 @@ class QAM:
     def modulating(self):
         bites_per_antenna = self.number_subcarriers * self.number_ofdm_symbols * int(np.log2(self.M))
 
-        # --- 1. Без кодирования ---
+        # ,ез кодирования
         self.x_bytes_a_unc = np.random.randint(0, 2, bites_per_antenna)
         self.x_bytes_b_unc = np.random.randint(0, 2, bites_per_antenna)
         self.x_bytes_unc = np.concatenate((self.x_bytes_a_unc, self.x_bytes_b_unc))
 
-        # --- 2. С кодированием ---
-        # Для кода 1/2 информационных битов генерируем в 2 раза меньше
+        # кодированием 
+        # Для кода 1/2 информационных битов  в 2 раза меньше
         info_bits_per_antenna = bites_per_antenna // 2
         self.info_bytes_a = np.random.randint(0, 2, info_bits_per_antenna)
         self.info_bytes_b = np.random.randint(0, 2, info_bits_per_antenna)
@@ -66,7 +66,7 @@ class QAM:
         self.x_bytes_a_cod = np.array(self.codec.encode(self.info_bytes_a.tolist()))
         self.x_bytes_b_cod = np.array(self.codec.encode(self.info_bytes_b.tolist()))
 
-        # --- Модуляция ---
+        # модуляция
         modem = QAMModem(self.M)
 
         self.x_qam_first_unc = np.array(modem.modulate(self.x_bytes_a_unc))
@@ -78,7 +78,7 @@ class QAM:
         self.x_qam_cod = np.concatenate((self.x_qam_first_cod, self.x_qam_second_cod))
 
     def ofdm(self):
-        # --- Без кодирования ---
+        #без кодирования
         self.x_ofdm_tensor_unc = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
         self.x_ofdm_tensor_unc[:, :, 0] = self.x_qam_first_unc.reshape(self.number_ofdm_symbols,
                                                                        self.number_subcarriers)
@@ -86,7 +86,7 @@ class QAM:
                                                                         self.number_subcarriers)
         self.x_ofdm_tensor_time_unc = np.fft.ifft(self.x_ofdm_tensor_unc, axis=1)
 
-        # --- С кодированием ---
+        # с кодированием 
         self.x_ofdm_tensor_cod = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
         self.x_ofdm_tensor_cod[:, :, 0] = self.x_qam_first_cod.reshape(self.number_ofdm_symbols,
                                                                        self.number_subcarriers)
@@ -95,7 +95,7 @@ class QAM:
         self.x_ofdm_tensor_time_cod = np.fft.ifft(self.x_ofdm_tensor_cod, axis=1)
 
     def power(self):
-        # Базируем расчет мощности на некадированном сигнале (мощность QAM созвездия одинакова)
+       
         power_x = np.mean(np.abs(self.x_ofdm_tensor_time_unc.flatten()) ** 2)
         power_freq = np.mean(np.abs(self.x_ofdm_tensor_unc.flatten()) ** 2)
 
@@ -105,7 +105,7 @@ class QAM:
         self.power_noise = power_x / SNR
 
     def _apply_channel(self, x_time_tensor):
-        """Вспомогательный метод: пропускает временной тензор через канал"""
+        
         cp_len = len(self.h_11) - 1
         y_tensor = []
 
@@ -168,7 +168,7 @@ class QAM:
 
         self.power()
 
-        # Пропускаем через канал оба потока параллельно
+        #  через канал оба потока параллельно
         self.y_unc = self._apply_channel(self.x_ofdm_tensor_time_unc)
         self.y_cod = self._apply_channel(self.x_ofdm_tensor_time_cod)
 
@@ -233,7 +233,7 @@ class QAM:
         modem = QAMModem(self.M)
         demod_bits = np.array(modem.demodulate(output, demod_type='hard'))
 
-        # Разделяем биты по антеннам, чтобы подать в декодер Витерби
+        # Разделяем биты по антеннам
         half = len(demod_bits) // 2
         bits_a = demod_bits[:half].tolist()
         bits_b = demod_bits[half:].tolist()
@@ -281,7 +281,7 @@ class QAM:
             self.mmse()
             self.ml()
 
-            # Демодуляция
+            # демодуляция
             dec_zf_unc = self.decode_uncoded(self.y_zf_unc)
             dec_mmse_unc = self.decode_uncoded(self.y_mmse_unc)
 
@@ -291,7 +291,7 @@ class QAM:
             dec_ml_unc = self.decode_uncoded(self.y_ml_unc)
             dec_ml_cod = self.decode_coded(self.y_ml_cod)
 
-            # --- ошибки ---
+            # ошибки
             err_zf_unc = np.count_nonzero(self.x_bytes_unc != dec_zf_unc)
             err_mmse_unc = np.count_nonzero(self.x_bytes_unc != dec_mmse_unc)
 
@@ -303,11 +303,11 @@ class QAM:
             err_ml_unc = np.count_nonzero(self.x_bytes_unc != dec_ml_unc)
             err_ml_cod = np.count_nonzero(self.info_bytes != dec_ml_cod)
 
-            # --- EVM ---
+            # EVM
             evm_zf_unc_list.append(np.mean(np.abs(self.y_zf_unc - self.x_qam_unc) ** 2))
             evm_mmse_unc_list.append(np.mean(np.abs(self.y_mmse_unc - self.x_qam_unc) ** 2))
 
-            # --- накопление uncoded ---
+            # -накопление некод
             if errors_zf_unc < 100:
                 errors_zf_unc += err_zf_unc
                 bits_zf_unc += self.x_bytes_unc.size
@@ -316,7 +316,7 @@ class QAM:
                 errors_mmse_unc += err_mmse_unc
                 bits_mmse_unc += self.x_bytes_unc.size
 
-            # --- накопление coded ---
+            # накопление витерби 
             if errors_zf_cod < 100:
                 errors_zf_cod += err_zf_cod
                 bits_zf_cod += self.info_bytes.size
@@ -396,7 +396,7 @@ class QAM:
 
         plt.figure(figsize=(14, 6))
 
-        # --- BER ---
+        #BER
         plt.subplot(1, 2, 1)
         plt.semilogy(snr_range, ber_zf_unc_avg, '-', label="ZF", color='blue')
         plt.semilogy(snr_range, ber_mmse_unc_avg, '-', label="MMSE", color='orange')
@@ -410,7 +410,7 @@ class QAM:
         plt.grid(True, which="both", linestyle='--', alpha=0.6)
         plt.legend()
 
-        # --- EVM ---
+        #  EVM 
         plt.subplot(1, 2, 2)
         plt.semilogy(snr_range, evm_zf_unc_avg, '-', label="ZF", color='blue')
         plt.semilogy(snr_range, evm_mmse_unc_avg, '-', label="MMSE", color='orange')
@@ -425,11 +425,11 @@ class QAM:
         plt.show()
 
 
-# Запуск
+
 if __name__ == "__main__":
     qam_1 = QAM(SNR_db=15, M=16, number_ofdm_symbols=40, number_subcarriers=7)
 
-    # Запускаем симуляцию
+   
     qam_1.ber_100_avg_plot(
         snr_range=np.arange(0, 30, 3),
         n_iter=10
