@@ -1,9 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import commpy as cp
-import time
 from commpy.modulation import QAMModem
-from viterbi import Viterbi  # Импорт добавленной библиотеки
+from viterbi import Viterbi  # Обязательно убедитесь, что библиотека доступна в вашей директории
 
 
 class QAM:
@@ -17,23 +16,18 @@ class QAM:
         #  Витерби  1/2
         self.codec = Viterbi(7, [0o133, 0o171])
 
-
-        #ML
-
+        # ML
         modem = QAMModem(self.M)
         const = modem.constellation
-
         self.ml_candidates = np.array([[s1, s2] for s1 in const for s2 in const])
 
-        self.power_noise = None
-        self.power_noise_freq = None
-
-        self.delta_f = 15 * 10 ** 3  # расстояние между поднесущими
-        self.bandwidth = 105 * 10 ** 3  # общая полоса
-        self.Fs = 1e8  # частота дискретизации
+        # = параметры  временного моделирования
+        self.delta_f = 15 * 10 ** 3
+        self.bandwidth = 105 * 10 ** 3
+        self.Fs = 1e8
         self.fc = 300 * 10 ** 3
 
-    def impulse_response(self):
+    def impulse_response(self, diagram=False):
         tau_us = np.array([0, 3, 5, 6, 8])  # мкс
         power_dB = np.array([0, -8, -17, -21, -25])
 
@@ -46,18 +40,26 @@ class QAM:
             phase[k] = 2 * np.pi * np.random.randint(0, N - 1) / N
 
         h = amplitude * np.exp(1j * phase)
+
+        if diagram:
+            plt.figure()
+            plt.title("Импульсная характеристика рассматриваемого канала", fontsize=16)
+            plt.stem(tau_us, amplitude, linefmt="black")
+            plt.xlabel("Отсчёт, мкс", fontsize=14)
+            plt.ylabel("Амплитуда", fontsize=14)
+            plt.show()
+
         return h
 
     def modulating(self):
         bites_per_antenna = self.number_subcarriers * self.number_ofdm_symbols * int(np.log2(self.M))
 
-        # ,ез кодирования
+        # без кодирования
         self.x_bytes_a_unc = np.random.randint(0, 2, bites_per_antenna)
         self.x_bytes_b_unc = np.random.randint(0, 2, bites_per_antenna)
         self.x_bytes_unc = np.concatenate((self.x_bytes_a_unc, self.x_bytes_b_unc))
 
-        # кодированием 
-        # Для кода 1/2 информационных битов  в 2 раза меньше
+        # с кодированием
         info_bits_per_antenna = bites_per_antenna // 2
         self.info_bytes_a = np.random.randint(0, 2, info_bits_per_antenna)
         self.info_bytes_b = np.random.randint(0, 2, info_bits_per_antenna)
@@ -78,118 +80,116 @@ class QAM:
         self.x_qam_cod = np.concatenate((self.x_qam_first_cod, self.x_qam_second_cod))
 
     def ofdm(self):
-        #без кодирования
+        # --- Без кодирования ---
         self.x_ofdm_tensor_unc = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
-        self.x_ofdm_tensor_unc[:, :, 0] = self.x_qam_first_unc.reshape(self.number_ofdm_symbols,
-                                                                       self.number_subcarriers)
-        self.x_ofdm_tensor_unc[:, :, 1] = self.x_qam_second_unc.reshape(self.number_ofdm_symbols,
-                                                                        self.number_subcarriers)
-        self.x_ofdm_tensor_time_unc = np.fft.ifft(self.x_ofdm_tensor_unc, axis=1)
+        self.x_ofdm_tensor_unc[:, :, 0] = self.x_qam_first_unc.reshape(self.number_ofdm_symbols, self.number_subcarriers)
+        self.x_ofdm_tensor_unc[:, :, 1] = self.x_qam_second_unc.reshape(self.number_ofdm_symbols, self.number_subcarriers)
 
-        # с кодированием 
+        # --- С кодированием ---
         self.x_ofdm_tensor_cod = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
-        self.x_ofdm_tensor_cod[:, :, 0] = self.x_qam_first_cod.reshape(self.number_ofdm_symbols,
-                                                                       self.number_subcarriers)
-        self.x_ofdm_tensor_cod[:, :, 1] = self.x_qam_second_cod.reshape(self.number_ofdm_symbols,
-                                                                        self.number_subcarriers)
-        self.x_ofdm_tensor_time_cod = np.fft.ifft(self.x_ofdm_tensor_cod, axis=1)
+        self.x_ofdm_tensor_cod[:, :, 0] = self.x_qam_first_cod.reshape(self.number_ofdm_symbols, self.number_subcarriers)
+        self.x_ofdm_tensor_cod[:, :, 1] = self.x_qam_second_cod.reshape(self.number_ofdm_symbols, self.number_subcarriers)
 
-    def power(self):
-       
-        power_x = np.mean(np.abs(self.x_ofdm_tensor_time_unc.flatten()) ** 2)
-        power_freq = np.mean(np.abs(self.x_ofdm_tensor_unc.flatten()) ** 2)
+    def power_of_signal(self):
+        return 2/3 * (self.M - 1)
 
-        SNR = 10 ** (self.SNR_db / 10)
-        self.SNR = SNR
-        self.power_noise_freq = power_freq / SNR
-        self.power_noise = power_x / SNR
+    def _apply_channel_with_pilots(self, x_ofdm_tensor):
 
-    def _apply_channel(self, x_time_tensor):
-        
-        cp_len = len(self.h_11) - 1
-        y_tensor = []
+        #  пилотов
+        res = np.zeros((3 * self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
+        res[0::3, :, :] = x_ofdm_tensor
+        res[1::3, :, :] = 1.0  # Pilot 1
+        res[2::3, :, 0] = 1.0  # Pilot 2
+        res[2::3, :, 1] = 2.0  # Pilot 2
+
+        # каждая третья срока инфа. теперь между информацией подается один офдм символ из 1 на две антенны, и один из 1 для певрой и 2 для второй
+
+
+        x_time_pilots = np.fft.ifft(res, axis=1) * np.sqrt(self.number_subcarriers)
+
+        def convolution_cp(r, h):
+            cp_len = len(h) - 1
+            x_cp = np.concatenate((r[-cp_len:], r))
+            y_conv = np.convolve(x_cp, h, mode='valid')
+            return y_conv
+
+        y_time_pilots = np.zeros_like(x_time_pilots)
+
+        #  (канал меняется каждые 3 символа)
+        for i in range(self.number_ofdm_symbols):
+            h11 = self.impulse_response()
+            h12 = self.impulse_response()
+            h21 = self.impulse_response()
+            h22 = self.impulse_response()
+
+            for n in range(3):
+                idx = 3 * i + n
+                tx1 = x_time_pilots[idx, :, 0]
+                tx2 = x_time_pilots[idx, :, 1]
+
+                rx1 = convolution_cp(tx1, h11) + convolution_cp(tx2, h12)
+                rx2 = convolution_cp(tx1, h21) + convolution_cp(tx2, h22)
+
+                y_time_pilots[idx, :, 0] = rx1
+                y_time_pilots[idx, :, 1] = rx2
+
+        # шум
+        P_signal = self.power_of_signal()
+        sigma = np.sqrt(P_signal / (2 * self.SNR))
+        noise = np.random.normal(0, sigma, y_time_pilots.shape) + 1j * np.random.normal(0, sigma, y_time_pilots.shape)
+
+        #  шум на пилотах = 0
+        for idx in range(y_time_pilots.shape[0]):
+            if idx % 3 != 0:
+                noise[idx, :, :] = 0
+
+        y_time_noisy = y_time_pilots + noise
+
+
+        Y_OFDM_pilots = np.fft.fft(y_time_noisy, axis=1) / np.sqrt(self.number_subcarriers)
+
+
+        H_est = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2, 2), dtype=complex)
+        Y_OFDM_data = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
+
+        # получаем H
 
         for i in range(self.number_ofdm_symbols):
-            x1 = x_time_tensor[i, :, 0]
-            x2 = x_time_tensor[i, :, 1]
+            Y_OFDM_data[i] = Y_OFDM_pilots[3 * i]
+            P1 = Y_OFDM_pilots[3 * i + 1]
+            P2 = Y_OFDM_pilots[3 * i + 2]
 
-            x1_cp = np.concatenate((x1[-cp_len:], x1))
-            x2_cp = np.concatenate((x2[-cp_len:], x2))
+            H_est[i, :, 0, 0] = 2 * P1[:, 0] - P2[:, 0]
+            H_est[i, :, 0, 1] = P2[:, 0] - P1[:, 0]
+            H_est[i, :, 1, 0] = 2 * P1[:, 1] - P2[:, 1]
+            H_est[i, :, 1, 1] = P2[:, 1] - P1[:, 1]
 
-            res_len = self.number_subcarriers + len(self.h_11) - 1
-            y1_conv = np.zeros(res_len, dtype=complex)
-            y2_conv = np.zeros(res_len, dtype=complex)
-
-            for k in range(res_len):
-                y1_k = 0;
-                y2_k = 0
-                m = 0
-                while k >= m and m <= len(self.h_11) - 1:
-                    y1_k += self.h_11[m] * x1_cp[k - m] + self.h_12[m] * x2_cp[k - m]
-                    y2_k += self.h_21[m] * x1_cp[k - m] + self.h_22[m] * x2_cp[k - m]
-                    m += 1
-                y1_conv[k] = y1_k
-                y2_conv[k] = y2_k
-
-            y1_cut = y1_conv[cp_len:cp_len + self.number_subcarriers]
-            y2_cut = y2_conv[cp_len:cp_len + self.number_subcarriers]
-
-            noise1 = (np.random.randn(self.number_subcarriers) + 1j * np.random.randn(
-                self.number_subcarriers)) * np.sqrt(self.power_noise / 2)
-            noise2 = (np.random.randn(self.number_subcarriers) + 1j * np.random.randn(
-                self.number_subcarriers)) * np.sqrt(self.power_noise / 2)
-
-            y1_noisy = y1_cut + noise1
-            y2_noisy = y2_cut + noise2
-
-            Y1 = np.fft.fft(y1_noisy)
-            Y2 = np.fft.fft(y2_noisy)
-
-            y_tensor.append(np.column_stack((Y1, Y2)))
-
-        return np.array(y_tensor)
+        return H_est, Y_OFDM_data
 
     def channel_with_noise(self):
-        self.h_11 = self.impulse_response()
-        self.h_12 = self.impulse_response()
-        self.h_21 = self.impulse_response()
-        self.h_22 = self.impulse_response()
+        self.SNR = 10 ** (self.SNR_db / 10)
 
-        self.h_11 = np.concatenate((self.h_11, np.zeros(self.number_subcarriers - len(self.h_11), dtype=complex)))
-        self.h_12 = np.concatenate((self.h_12, np.zeros(self.number_subcarriers - len(self.h_12), dtype=complex)))
-        self.h_21 = np.concatenate((self.h_21, np.zeros(self.number_subcarriers - len(self.h_21), dtype=complex)))
-        self.h_22 = np.concatenate((self.h_22, np.zeros(self.number_subcarriers - len(self.h_22), dtype=complex)))
+        self.H_est_unc, self.y_unc = self._apply_channel_with_pilots(self.x_ofdm_tensor_unc)
+        self.H_est_cod, self.y_cod = self._apply_channel_with_pilots(self.x_ofdm_tensor_cod)
 
-        self.H = np.zeros((2, 2, self.number_subcarriers), dtype=complex)
-        self.H[0, 0, :] = np.fft.fft(self.h_11)
-        self.H[0, 1, :] = np.fft.fft(self.h_12)
-        self.H[1, 0, :] = np.fft.fft(self.h_21)
-        self.H[1, 1, :] = np.fft.fft(self.h_22)
-
-        self.power()
-
-        #  через канал оба потока параллельно
-        self.y_unc = self._apply_channel(self.x_ofdm_tensor_time_unc)
-        self.y_cod = self._apply_channel(self.x_ofdm_tensor_time_cod)
-
-    def _zf(self, y_tensor):
+    def _zf(self, y_tensor, H_est):
         x_est = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
         for i in range(self.number_ofdm_symbols):
             for k in range(self.number_subcarriers):
-                Hk = self.H[:, :, k]
+                Hk = H_est[i, k, :, :]
                 yk = y_tensor[i, k, :]
                 x_est[i, k, :] = np.linalg.solve(Hk, yk)
         return x_est.transpose(2, 0, 1).reshape(-1)
 
     def zero_forcing(self):
-        self.y_zf_unc = self._zf(self.y_unc)
-        self.y_zf_cod = self._zf(self.y_cod)
+        self.y_zf_unc = self._zf(self.y_unc, self.H_est_unc)
+        self.y_zf_cod = self._zf(self.y_cod, self.H_est_cod)
 
-    def _mmse(self, y_tensor):
+    def _mmse(self, y_tensor, H_est):
         x_est = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
         for i in range(self.number_ofdm_symbols):
             for k in range(self.number_subcarriers):
-                Hk = self.H[:, :, k]
+                Hk = H_est[i, k, :, :]
                 yk = y_tensor[i, k, :]
                 Hh = Hk.conj().T
                 W = np.linalg.inv(Hh @ Hk + (1 / self.SNR) * np.eye(2)) @ Hh
@@ -197,33 +197,23 @@ class QAM:
         return x_est.transpose(2, 0, 1).reshape(-1)
 
     def mmse(self):
-        self.y_mmse_unc = self._mmse(self.y_unc)
-        self.y_mmse_cod = self._mmse(self.y_cod)
+        self.y_mmse_unc = self._mmse(self.y_unc, self.H_est_unc)
+        self.y_mmse_cod = self._mmse(self.y_cod, self.H_est_cod)
 
-    def _ml(self, y_tensor):
-
-        x_est = np.zeros((self.number_ofdm_symbols,
-                          self.number_subcarriers,
-                          2), dtype=complex)
-
+    def _ml(self, y_tensor, H_est):
+        x_est = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
         for i in range(self.number_ofdm_symbols):
             for k in range(self.number_subcarriers):
-                Hk = self.H[:, :, k]
+                Hk = H_est[i, k, :, :]
                 yk = y_tensor[i, k, :]
-
-                metrics = np.linalg.norm(
-                    yk - (Hk @ self.ml_candidates.T).T,
-                    axis=1
-                ) ** 2
-
+                metrics = np.linalg.norm(yk - (Hk @ self.ml_candidates.T).T, axis=1) ** 2
                 best = np.argmin(metrics)
-
                 x_est[i, k, :] = self.ml_candidates[best]
-
         return x_est.transpose(2, 0, 1).reshape(-1)
+
     def ml(self):
-        self.y_ml_unc = self._ml(self.y_unc)
-        self.y_ml_cod = self._ml(self.y_cod)
+        self.y_ml_unc = self._ml(self.y_unc, self.H_est_unc)
+        self.y_ml_cod = self._ml(self.y_cod, self.H_est_cod)
 
     def decode_uncoded(self, output):
         modem = QAMModem(self.M)
@@ -233,7 +223,6 @@ class QAM:
         modem = QAMModem(self.M)
         demod_bits = np.array(modem.demodulate(output, demod_type='hard'))
 
-        # Разделяем биты по антеннам
         half = len(demod_bits) // 2
         bits_a = demod_bits[:half].tolist()
         bits_b = demod_bits[half:].tolist()
@@ -243,36 +232,17 @@ class QAM:
 
         return np.concatenate((dec_info_a, dec_info_b))
 
-    def ber_until_100(self, snr):
-
-        errors_zf_unc = errors_mmse_unc = 0
-        errors_zf_cod = errors_mmse_cod = 0
-
-        bits_zf_unc = bits_mmse_unc = 0
-        bits_zf_cod = bits_mmse_cod = 0
-
-        errors_ml_unc = 0
-        errors_ml_cod = 0
-
-        bits_ml_unc = 0
-        bits_ml_cod = 0
-
-        evm_zf_unc_list = []
-        evm_mmse_unc_list = []
-
+    def ber_until_100(self, snr, max_iter=500):
         self.SNR_db = snr
+        TARGET_ERRORS = 100
 
-        max_iters = 100
-        iter_count = 0
+        err = {k: 0 for k in ['zf_unc', 'mmse_unc', 'ml_unc', 'zf_cod', 'mmse_cod', 'ml_cod']}
+        bits = {k: 0 for k in err.keys()}
+        evm_zf_acc, evm_mmse_acc = [], []
 
-        while (
-                errors_zf_unc < 100 or
-                errors_mmse_unc < 100 or
-                errors_zf_cod < 100 or
-                errors_mmse_cod < 100
-        ) and iter_count < max_iters:
-
-            iter_count += 1
+        for _ in range(max_iter):
+            if all(v >= TARGET_ERRORS for v in err.values()):
+                break
 
             self.modulating()
             self.ofdm()
@@ -281,156 +251,133 @@ class QAM:
             self.mmse()
             self.ml()
 
-            # демодуляция
             dec_zf_unc = self.decode_uncoded(self.y_zf_unc)
             dec_mmse_unc = self.decode_uncoded(self.y_mmse_unc)
+            dec_ml_unc = self.decode_uncoded(self.y_ml_unc)
 
             dec_zf_cod = self.decode_coded(self.y_zf_cod)
             dec_mmse_cod = self.decode_coded(self.y_mmse_cod)
-
-            dec_ml_unc = self.decode_uncoded(self.y_ml_unc)
             dec_ml_cod = self.decode_coded(self.y_ml_cod)
 
-            # ошибки
-            err_zf_unc = np.count_nonzero(self.x_bytes_unc != dec_zf_unc)
-            err_mmse_unc = np.count_nonzero(self.x_bytes_unc != dec_mmse_unc)
+            n_unc = len(self.x_bytes_unc)
+            n_cod = len(self.info_bytes)
 
-            err_zf_cod = np.count_nonzero(self.info_bytes != dec_zf_cod)
-            err_mmse_cod = np.count_nonzero(self.info_bytes != dec_mmse_cod)
+            err['zf_unc'] += int(np.sum(dec_zf_unc != self.x_bytes_unc))
+            err['mmse_unc'] += int(np.sum(dec_mmse_unc != self.x_bytes_unc))
+            err['ml_unc'] += int(np.sum(dec_ml_unc != self.x_bytes_unc))
+            err['zf_cod'] += int(np.sum(dec_zf_cod != self.info_bytes))
+            err['mmse_cod'] += int(np.sum(dec_mmse_cod != self.info_bytes))
+            err['ml_cod'] += int(np.sum(dec_ml_cod != self.info_bytes))
 
-            #ML
-
-            err_ml_unc = np.count_nonzero(self.x_bytes_unc != dec_ml_unc)
-            err_ml_cod = np.count_nonzero(self.info_bytes != dec_ml_cod)
-
-            # EVM
-            evm_zf_unc_list.append(np.mean(np.abs(self.y_zf_unc - self.x_qam_unc) ** 2))
-            evm_mmse_unc_list.append(np.mean(np.abs(self.y_mmse_unc - self.x_qam_unc) ** 2))
-
-            # -накопление некод
-            if errors_zf_unc < 100:
-                errors_zf_unc += err_zf_unc
-                bits_zf_unc += self.x_bytes_unc.size
-
-            if errors_mmse_unc < 100:
-                errors_mmse_unc += err_mmse_unc
-                bits_mmse_unc += self.x_bytes_unc.size
-
-            # накопление витерби 
-            if errors_zf_cod < 100:
-                errors_zf_cod += err_zf_cod
-                bits_zf_cod += self.info_bytes.size
-
-            if errors_mmse_cod < 100:
-                errors_mmse_cod += err_mmse_cod
-                bits_mmse_cod += self.info_bytes.size
+            for k in ['zf_unc', 'mmse_unc', 'ml_unc']: bits[k] += n_unc
+            for k in ['zf_cod', 'mmse_cod', 'ml_cod']: bits[k] += n_cod
 
 
-            if errors_ml_unc < 100:
-                errors_ml_unc += err_ml_unc
-                bits_ml_unc += self.x_bytes_unc.size
+            evm_zf_acc.append(np.sum(np.abs(self.x_qam_unc - self.y_zf_unc) ** 2) / len(self.x_qam_unc))
+            evm_mmse_acc.append(np.sum(np.abs(self.x_qam_unc - self.y_mmse_unc) ** 2) / len(self.x_qam_unc))
 
-            if errors_ml_cod < 100:
-                errors_ml_cod += err_ml_cod
-                bits_ml_cod += self.info_bytes.size
+        def safe_ber(e, b):
+            return e / b if b > 0 else 0.0
 
-        # BER
-        ber_zf_unc = errors_zf_unc / bits_zf_unc
-        ber_mmse_unc = errors_mmse_unc / bits_mmse_unc
+        return (safe_ber(err['zf_unc'], bits['zf_unc']),
+                safe_ber(err['mmse_unc'], bits['mmse_unc']),
+                safe_ber(err['zf_cod'], bits['zf_cod']),
+                safe_ber(err['mmse_cod'], bits['mmse_cod']),
+                safe_ber(err['ml_unc'], bits['ml_unc']),
+                safe_ber(err['ml_cod'], bits['ml_cod']),
+                float(np.mean(evm_zf_acc)) if evm_zf_acc else 0.0,
+                float(np.mean(evm_mmse_acc)) if evm_mmse_acc else 0.0)
 
-        ber_zf_cod = errors_zf_cod / bits_zf_cod
-        ber_mmse_cod = errors_mmse_cod / bits_mmse_cod
+    def plot_constellations(self):
+        # Отрисовка QAM созвездий (аналог ваших subplot'ов)
+        plt.figure(figsize=(12, 5))
 
-        ber_ml_unc = errors_ml_unc / bits_ml_unc
-        ber_ml_cod = errors_ml_cod / bits_ml_cod
+        plt.subplot(1, 3, 1)
+        plt.title(f"Modulated signal (QAM{self.M})")
+        plt.scatter(np.real(self.x_qam_unc), np.imag(self.x_qam_unc), color="red")
+        plt.xlabel("I"); plt.ylabel("Q")
 
-        return (
-            ber_zf_unc,
-            ber_mmse_unc,
-            ber_zf_cod,
-            ber_mmse_cod,
-            ber_ml_unc,
-            ber_ml_cod,
-            np.mean(evm_zf_unc_list),
-            np.mean(evm_mmse_unc_list)
-        )
+        plt.subplot(1, 3, 2)
+        plt.title(f"Signal after channel with AWGN (SNR={self.SNR_db} dB)")
+        y_flat = self.y_unc.flatten()
+        plt.scatter(np.real(y_flat), np.imag(y_flat), color="black", s=0.5)
+        plt.scatter(np.real(self.x_qam_unc), np.imag(self.x_qam_unc), color="red", s=20)
+        plt.xlabel("I"); plt.ylabel("Q")
 
+        plt.subplot(1, 3, 3)
+        plt.title("Equalized signal")
+        plt.scatter(np.real(self.y_zf_unc), np.imag(self.y_zf_unc), s=0.5, color="blue", label="ZF")
+        plt.scatter(np.real(self.y_mmse_unc), np.imag(self.y_mmse_unc), s=0.5, color="green", label="MMSE")
+        plt.scatter(np.real(self.x_qam_unc), np.imag(self.x_qam_unc), color="red", s=20)
+        plt.xlabel("I"); plt.ylabel("Q")
+        plt.legend(fontsize=10)
+
+        plt.tight_layout()
+        plt.show()
 
     def ber_100_avg_plot(self, snr_range, n_iter):
         ber_zf_unc_avg, ber_mmse_unc_avg = [], []
         ber_zf_cod_avg, ber_mmse_cod_avg = [], []
         evm_zf_unc_avg, evm_mmse_unc_avg = [], []
-
-        ber_ml_unc_avg = []
-        ber_ml_cod_avg = []
+        ber_ml_unc_avg, ber_ml_cod_avg = [], []
 
         for snr in snr_range:
-            b_zu, b_mu, b_zc, b_mc = [], [], [], []
+            b_zu, b_mu, b_zc, b_mc, b_mlu, b_mlc = [], [], [], [], [], []
             e_zu, e_mu = [], []
-            b_mlu, b_mlc = [], []
 
             for _ in range(n_iter):
                 res = self.ber_until_100(snr)
-                b_zu.append(res[0])
-                b_mu.append(res[1])
-                b_zc.append(res[2])
-                b_mc.append(res[3])
-                b_mlu.append(res[4])
-                b_mlc.append(res[5])
+                b_zu.append(res[0]); b_mu.append(res[1])
+                b_zc.append(res[2]); b_mc.append(res[3])
+                b_mlu.append(res[4]); b_mlc.append(res[5])
+                e_zu.append(res[6]); e_mu.append(res[7])
 
-                e_zu.append(res[6])
-                e_mu.append(res[7])
+            ber_zf_unc_avg.append(np.mean(b_zu)); ber_mmse_unc_avg.append(np.mean(b_mu))
+            ber_zf_cod_avg.append(np.mean(b_zc)); ber_mmse_cod_avg.append(np.mean(b_mc))
+            ber_ml_unc_avg.append(np.mean(b_mlu)); ber_ml_cod_avg.append(np.mean(b_mlc))
+            evm_zf_unc_avg.append(np.mean(e_zu)); evm_mmse_unc_avg.append(np.mean(e_mu))
 
-            ber_zf_unc_avg.append(np.mean(b_zu))
-            ber_mmse_unc_avg.append(np.mean(b_mu))
-            ber_zf_cod_avg.append(np.mean(b_zc))
-            ber_mmse_cod_avg.append(np.mean(b_mc))
-            ber_ml_unc_avg.append(np.mean(b_mlu))
-            ber_ml_cod_avg.append(np.mean(b_mlc))
+            print(f"SNR {snr:2d} | ZF Uncoded: {np.mean(b_zu):.3e} | ZF Coded: {np.mean(b_zc):.3e} || MMSE Uncoded: {np.mean(b_mu):.3e} | MMSE Coded: {np.mean(b_mc):.3e}")
 
-            evm_zf_unc_avg.append(np.mean(e_zu))
-            evm_mmse_unc_avg.append(np.mean(e_mu))
+        plt.figure(figsize=(12, 5))
 
-            print(
-                f"SNR {snr:2d} | ZF Uncoded: {np.mean(b_zu):.3e} | ZF Coded: {np.mean(b_zc):.3e} || MMSE Uncoded: {np.mean(b_mu):.3e} | MMSE Coded: {np.mean(b_mc):.3e}")
-
-        plt.figure(figsize=(14, 6))
-
-        #BER
+        #  BER
         plt.subplot(1, 2, 1)
-        plt.semilogy(snr_range, ber_zf_unc_avg, '-', label="ZF", color='blue')
-        plt.semilogy(snr_range, ber_mmse_unc_avg, '-', label="MMSE", color='orange')
-        plt.semilogy(snr_range, ber_zf_cod_avg, '--', label="ZF (Viterbi)", color='blue')
-        plt.semilogy(snr_range, ber_mmse_cod_avg, '--', label="MMSE (Viterbi)", color='orange')
-        plt.semilogy(snr_range, ber_ml_unc_avg, '-', label="ML", color='green')
-        plt.semilogy(snr_range, ber_ml_cod_avg, '--', label="ML (Viterbi)", color='green')
+        plt.semilogy(snr_range, ber_zf_unc_avg, '-', label="ZF Uncoded", color='blue')
+        plt.semilogy(snr_range, ber_zf_cod_avg, '--', label="ZF Coded", color='blue')
+        plt.semilogy(snr_range, ber_mmse_unc_avg, '-', label="MMSE Uncoded", color='orange')
+        plt.semilogy(snr_range, ber_mmse_cod_avg, '--', label="MMSE Coded", color='orange')
+        plt.semilogy(snr_range, ber_ml_unc_avg, '-', label="ML Uncoded", color='green')
+        plt.semilogy(snr_range, ber_ml_cod_avg, '--', label="ML Coded", color='green')
         plt.xlabel("SNR (dB)")
         plt.ylabel("BER")
-
         plt.grid(True, which="both", linestyle='--', alpha=0.6)
-        plt.legend()
+        plt.legend(fontsize=8)
 
-        #  EVM 
+        #  EVM
         plt.subplot(1, 2, 2)
         plt.semilogy(snr_range, evm_zf_unc_avg, '-', label="ZF", color='blue')
         plt.semilogy(snr_range, evm_mmse_unc_avg, '-', label="MMSE", color='orange')
-
         plt.xlabel("SNR (dB)")
         plt.ylabel("EVM")
-
         plt.grid(True, which="both", linestyle='--', alpha=0.6)
-        plt.legend()
+        plt.legend(fontsize=8)
 
         plt.tight_layout()
+        plt.savefig('result_plot.png')
         plt.show()
 
 
 
 if __name__ == "__main__":
-    qam_1 = QAM(SNR_db=15, M=16, number_ofdm_symbols=40, number_subcarriers=7)
 
-   
-    qam_1.ber_100_avg_plot(
-        snr_range=np.arange(0, 30, 3),
-        n_iter=10
-    )
+    qam_1 = QAM(SNR_db=20, M=16, number_ofdm_symbols=20, number_subcarriers=7)
+    qam_1.modulating()
+    qam_1.ofdm()
+    qam_1.channel_with_noise()
+    qam_1.zero_forcing()
+    qam_1.mmse()
+
+
+
+    qam_1.ber_100_avg_plot(snr_range=np.arange(0, 20, 2), n_iter=5)
