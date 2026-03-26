@@ -230,14 +230,14 @@ class QAM:
 
     # === LLR для MMSE coded ===
     def llr_mmse_coded(self, y_tensor, H_est):
-        self.power_of_noise_f = self.power_of_signal() / self.SNR
+        self.power_of_noise_f = self.power_of_signal() / self.SNR #мощность
         bits_out = []
 
-        y_mmse = self._mmse(y_tensor, H_est)
+        y_mmse = self._mmse(y_tensor, H_est) #делаем ммсе
 
-        for i in range(0, len(y_mmse), 2):
+        for i in range(0, len(y_mmse), 2): #
             llr = self.llr_count_without_H(y_mmse[i:i+2])
-            bits_out.extend([0 if l < 0 else 1 for l in llr])
+            bits_out.extend([0 if l < 0 else 1 for l in llr]) #правило ллр принятия решения
 
         half = len(bits_out) // 2
         dec_a = self.codec.decode(bits_out[:half])
@@ -245,11 +245,11 @@ class QAM:
         return np.concatenate((dec_a, dec_b))
 
     def llr_count_without_H(self, output_signal):
-        bits_x, bits_y = np.meshgrid(self.M_2, self.M_2)
-        bits_x = bits_x.reshape(-1, 1)
-        bits_y = bits_y.reshape(-1, 1)
+        bits_x, bits_y = np.meshgrid(self.M_2, self.M_2) #комбинация битов, 16 на 16 256 комбинаций
+        bits_x = bits_x.reshape(-1, 1) #вектор битов
+        bits_y = bits_y.reshape(-1, 1)   #вектор битов
 
-        bits_grid = np.concatenate((bits_x, bits_y), axis=1)
+        bits_grid = np.concatenate((bits_x, bits_y), axis=1) #вектор битов 256 на 2
         bits_for_llr_str = np.array(list(map(lambda x, y: x + y, bits_grid[:, 0], bits_grid[:, 1])))
         bits_for_llr_int = np.array([list(map(int, bits_for_llr_str[b])) for b in range(len(bits_for_llr_str))])
 
@@ -271,7 +271,7 @@ class QAM:
 
         return llr
 
-    # === BER до 100 ошибок (включая LLR) ===
+
     def ber_until_100(self, snr, max_iter=500):
         self.SNR_db = snr
         TARGET_ERRORS = 100
