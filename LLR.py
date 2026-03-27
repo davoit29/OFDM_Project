@@ -245,18 +245,18 @@ class QAM:
         return np.concatenate((dec_a, dec_b))
 
     def llr_count_without_H(self, output_signal):
-        bits_x, bits_y = np.meshgrid(self.M_2, self.M_2) #комбинация битов, 16 на 16 256 комбинаций
-        bits_x = bits_x.reshape(-1, 1) #вектор битов
-        bits_y = bits_y.reshape(-1, 1)   #вектор битов
+        bits_x, bits_y = np.meshgrid(self.M_2, self.M_2) # сетка комбинация битов, 16 на 16 256 комбинаций meshgrid создает таблицу 16x16, где в каждой ячейке — пара (бит_антенны_1, бит_антенны_2) все 16^2 = 256 вариантов.
+        bits_x = bits_x.reshape(-1, 1) #вектор комбинаций
+        bits_y = bits_y.reshape(-1, 1)   #вектор комбинаций
 
-        bits_grid = np.concatenate((bits_x, bits_y), axis=1) #вектор битов 256 на 2
-        bits_for_llr_str = np.array(list(map(lambda x, y: x + y, bits_grid[:, 0], bits_grid[:, 1])))
+        bits_grid = np.concatenate((bits_x, bits_y), axis=1) #вектор битов 256 * 2
+        bits_for_llr_str = np.array(list(map(lambda x, y: x + y, bits_grid[:, 0], bits_grid[:, 1])))  #lambda функция короткая запись функции , map прмиенение функции к списку - на выходе список
         bits_for_llr_int = np.array([list(map(int, bits_for_llr_str[b])) for b in range(len(bits_for_llr_str))])
 
-        qam_x, qam_y = np.meshgrid(self.QAM_constellation, self.QAM_constellation)
-        qam_x = qam_x.reshape(-1, 1)
-        qam_y = qam_y.reshape(-1, 1)
-        qam_grid = np.concatenate((qam_x, qam_y), axis=1)
+        qam_x, qam_y = np.meshgrid(self.QAM_constellation, self.QAM_constellation) # сетка комбинация мод символов, 16 на 16 256 комбинаций
+        qam_x = qam_x.reshape(-1, 1) #вектор 
+        qam_y = qam_y.reshape(-1, 1) #вектор 
+        qam_grid = np.concatenate((qam_x, qam_y), axis=1) #сетка 256 на 256
 
         output_signal_grid = output_signal * np.ones_like(qam_grid)
         d_grid = np.exp(-np.sum(np.abs(qam_grid - output_signal_grid)**2, axis=1) / self.power_of_noise_f)
