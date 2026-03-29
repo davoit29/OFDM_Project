@@ -375,10 +375,13 @@ class QAM:
                 b_zu.append(res[0]); b_mu.append(res[1])
                 b_zc.append(res[2]); b_mc.append(res[3])
                 b_mlu.append(res[4]); b_mlc.append(res[5])
-                e_zu.append(res[6]); e_mu.append(res[7])
+
                 b_zllr.append(res[6])
                 b_mllr.append(res[7])
                 b_mlll.append(res[8])
+
+                e_zu.append(res[9])
+                e_mu.append(res[10])
 
             ber_zf_unc_avg.append(np.mean(b_zu)); ber_mmse_unc_avg.append(np.mean(b_mu))
             ber_zf_cod_avg.append(np.mean(b_zc)); ber_mmse_cod_avg.append(np.mean(b_mc))
