@@ -14,3 +14,6 @@ QAM модуляция
 x_ofdm_tensor[i, k] = [x1, x2]
 ```
 ## Структура пилотов
+
+<img width="896" height="271" alt="image" src="https://github.com/user-attachments/assets/b8ead995-1e7b-415a-9337-d5661a47ca14" />
+
