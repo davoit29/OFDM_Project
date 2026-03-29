@@ -178,7 +178,7 @@ class QAM:
             for k in range(self.number_subcarriers):
                 Hk = H_est[i, k, :, :]
                 yk = y_tensor[i, k, :]
-                x_est[i, k, :] = np.linalg.solve(Hk, yk)
+                x_est[i, k, :] = np.linalg.pinv(Hk) @ yk
         return x_est.transpose(2, 0, 1).reshape(-1)
 
     def zero_forcing(self):
@@ -239,8 +239,12 @@ class QAM:
     def decode_coded_llr(self, output):
         modem = QAMModem(self.M)
 
-        # получаем LLR (soft значения)
-        llr = modem.demodulate(output, demod_type='soft', noise_var=1 / self.SNR)
+        noise_var = self.power_of_signal() / self.SNR
+
+        llr = modem.demodulate(output, demod_type='soft', noise_var=noise_var)
+
+        # 🔥 КЛИППИНГ (ОБЯЗАТЕЛЬНО)
+        llr = np.clip(llr, -20, 20)
 
         half = len(llr) // 2
         llr_a = llr[:half]
@@ -392,7 +396,8 @@ class QAM:
             ber_ml_llr_avg.append(np.mean(b_mlll))
             print(f"SNR {snr:2d} | "
                   f"ZF Uncoded: {np.mean(b_zu):.3e} | ZF Coded: {np.mean(b_zc):.3e} | ZF LLR: {np.mean(b_zllr):.3e} || "
-                  f"MMSE Uncoded: {np.mean(b_mu):.3e} | MMSE Coded: {np.mean(b_mc):.3e} | MMSE LLR: {np.mean(b_mllr):.3e}")
+                  f"MMSE Uncoded: {np.mean(b_mu):.3e} | MMSE Coded: {np.mean(b_mc):.3e} | MMSE LLR: {np.mean(b_mllr):.3e}" 
+                  f"ML Uncoded: {np.mean(b_mlu):.3e} | MML Coded: {np.mean(b_mlc):.3e} | ML LLR: {np.mean(b_mlll):.3e}")
 
         plt.figure(figsize=(12, 5))
 
