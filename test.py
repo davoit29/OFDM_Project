@@ -80,12 +80,12 @@ class QAM:
         self.x_qam_cod = np.concatenate((self.x_qam_first_cod, self.x_qam_second_cod))
 
     def ofdm(self):
-        # --- Без кодирования ---
+        #  Без кодирования
         self.x_ofdm_tensor_unc = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
         self.x_ofdm_tensor_unc[:, :, 0] = self.x_qam_first_unc.reshape(self.number_ofdm_symbols, self.number_subcarriers)
         self.x_ofdm_tensor_unc[:, :, 1] = self.x_qam_second_unc.reshape(self.number_ofdm_symbols, self.number_subcarriers)
 
-        # --- С кодированием ---
+        #  С кодированием
         self.x_ofdm_tensor_cod = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
         self.x_ofdm_tensor_cod[:, :, 0] = self.x_qam_first_cod.reshape(self.number_ofdm_symbols, self.number_subcarriers)
         self.x_ofdm_tensor_cod[:, :, 1] = self.x_qam_second_cod.reshape(self.number_ofdm_symbols, self.number_subcarriers)
