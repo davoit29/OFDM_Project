@@ -17,7 +17,7 @@ x_ofdm_tensor[i, k] = [x1, x2]
 
 <img width="896" height="271" alt="image" src="https://github.com/user-attachments/assets/b8ead995-1e7b-415a-9337-d5661a47ca14" />
 
-
+Для каждого модуляционного символа своя матрица H 2 на 2
 ```python
 H_est[i, :, 0, 0] = 2 * P1[:, 0] - P2[:, 0]  # h11
 H_est[i, :, 0, 1] = P2[:, 0] - P1[:, 0]      # h12
