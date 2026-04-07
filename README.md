@@ -46,7 +46,9 @@ $$
 $$
 \mathbf{H}^H = (\mathbf{H}^*)^T
 $$
-
+```
+ Hh = Hk.conj().T
+```
 ## ML
 
 
