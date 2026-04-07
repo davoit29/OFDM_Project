@@ -32,6 +32,10 @@ $$
 \hat{\mathbf{x}} = \mathbf{H}^{-1} \mathbf{y}
 $$
 ## MMSE
+
+$$
+\mathbf{H} \hat{\mathbf{x}} = \mathbf{y}
+$$
 ## ML
 
 
