@@ -31,11 +31,22 @@ H_est[i, :, 1, 1] = P2[:, 1] - P1[:, 1]      # h22
 $$
 \hat{\mathbf{x}} = \mathbf{H}^{-1} \mathbf{y}
 $$
-## MMSE
 
 $$
 \mathbf{H} \hat{\mathbf{x}} = \mathbf{y}
 $$
+
+## MMSE
+$$
+\hat{\mathbf{x}} =
+\left( \mathbf{H}^H \mathbf{H} + \frac{1}{\mathrm{SNR}} \mathbf{I} \right)^{-1}
+\mathbf{H}^H \mathbf{y}
+$$
+
+$$
+\mathbf{H}^H = (\mathbf{H}^*)^T
+$$
+
 ## ML
 
 
