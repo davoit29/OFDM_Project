@@ -46,8 +46,12 @@ $$
 $$
 \mathbf{H}^H = (\mathbf{H}^*)^T
 $$
+```python
+Hh = Hk.conj().T
 ```
- Hh = Hk.conj().T
+
+```python
+W = np.linalg.inv(Hh @ Hk + (1 / self.SNR) * np.eye(2)) @ Hh
 ```
 ## ML
 
