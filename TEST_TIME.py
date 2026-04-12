@@ -8,6 +8,32 @@ class MMSETest:
         self.number_subcarriers = number_subcarriers
         self.SNR = SNR
 
+    def qr_solve(self, A, b):
+
+        r = np.sqrt((A[0, 0]) ** 2 + (A[1, 0]) ** 2)
+
+        c = A[0, 0] / r
+        s = A[1, 0] / r
+
+        G = np.array([
+            [c, s],
+            [-s, c]
+        ])
+
+
+
+        R = G @ A
+
+        y = G @ b
+
+        x_2 = y[1] / R[1, 1]
+
+        x_1 = (y[0] - R[0, 1] * x_2) / R[0, 0]
+
+        x = np.array([x_1, x_2], dtype=complex)
+
+        return x
+
     def _mmse(self, y_tensor, H_est):
         number_ofdm_symbols = y_tensor.shape[0]
 
@@ -19,11 +45,29 @@ class MMSETest:
                 yk = y_tensor[i, k, :]
 
                 Hh = Hk.conj().T
-                W = np.linalg.inv(Hh @ Hk + (1 / self.SNR) * np.eye(2)) @ Hh
+                A = Hh @ Hk + (1 / self.SNR) * np.eye(2)
 
-                x_est[i, k, :] = W @ yk
+                b = Hh @ yk
+
+
+
+                x_est[i, k, :] = self.qr_solve(A,b)
 
         return x_est
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # ================= ПАРАМЕТРЫ =================
