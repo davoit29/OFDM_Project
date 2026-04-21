@@ -243,7 +243,7 @@ class QAM:
 
         llr = modem.demodulate(output, demod_type='soft', noise_var=noise_var)
 
-        # 🔥 КЛИППИНГ (ОБЯЗАТЕЛЬНО)
+   
         llr = np.clip(llr, -20, 20)
 
         half = len(llr) // 2
@@ -336,7 +336,7 @@ class QAM:
                 float(np.mean(evm_mmse_acc)) if evm_mmse_acc else 0.0)
 
     def plot_constellations(self):
-        # Отрисовка QAM созвездий (аналог ваших subplot'ов)
+        
         plt.figure(figsize=(12, 5))
 
         plt.subplot(1, 3, 1)
