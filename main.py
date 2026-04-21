@@ -80,12 +80,12 @@ class QAM:
         self.x_qam_cod = np.concatenate((self.x_qam_first_cod, self.x_qam_second_cod))
 
     def ofdm(self):
-        # --- Без кодирования ---
+        #  Без кодирования
         self.x_ofdm_tensor_unc = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
         self.x_ofdm_tensor_unc[:, :, 0] = self.x_qam_first_unc.reshape(self.number_ofdm_symbols, self.number_subcarriers)
         self.x_ofdm_tensor_unc[:, :, 1] = self.x_qam_second_unc.reshape(self.number_ofdm_symbols, self.number_subcarriers)
 
-        # --- С кодированием ---
+        #  С кодированием
         self.x_ofdm_tensor_cod = np.zeros((self.number_ofdm_symbols, self.number_subcarriers, 2), dtype=complex)
         self.x_ofdm_tensor_cod[:, :, 0] = self.x_qam_first_cod.reshape(self.number_ofdm_symbols, self.number_subcarriers)
         self.x_ofdm_tensor_cod[:, :, 1] = self.x_qam_second_cod.reshape(self.number_ofdm_symbols, self.number_subcarriers)
@@ -178,7 +178,7 @@ class QAM:
             for k in range(self.number_subcarriers):
                 Hk = H_est[i, k, :, :]
                 yk = y_tensor[i, k, :]
-                x_est[i, k, :] = np.linalg.solve(Hk, yk)
+                x_est[i, k, :] = np.linalg.pinv(Hk) @ yk
         return x_est.transpose(2, 0, 1).reshape(-1)
 
     def zero_forcing(self):
@@ -222,7 +222,7 @@ class QAM:
     def decode_coded(self, output):
         modem = QAMModem(self.M)
 
-        
+        # soft или hard — пока оставим hard (как у тебя было)
         demod_bits = np.array(modem.demodulate(output, demod_type='hard'))
 
         half = len(demod_bits) // 2
@@ -236,11 +236,42 @@ class QAM:
 
         return np.concatenate((dec_info_a, dec_info_b))
 
+    def decode_coded_llr(self, output):
+        modem = QAMModem(self.M)
+
+        noise_var = self.power_of_signal() / self.SNR
+
+        llr = modem.demodulate(output, demod_type='soft', noise_var=noise_var)
+
+        # 🔥 КЛИППИНГ (ОБЯЗАТЕЛЬНО)
+        llr = np.clip(llr, -20, 20)
+
+        half = len(llr) // 2
+        llr_a = llr[:half]
+        llr_b = llr[half:]
+
+        tb_depth = 5 * (self.trellis.total_memory + 1)
+
+        dec_a = cc.viterbi_decode(llr_a, self.trellis,
+                                  tb_depth=tb_depth,
+                                  decoding_type='unquantized')
+
+        dec_b = cc.viterbi_decode(llr_b, self.trellis,
+                                  tb_depth=tb_depth,
+                                  decoding_type='unquantized')
+
+        return np.concatenate((dec_a, dec_b))
+
     def ber_until_100(self, snr, max_iter=100):
         self.SNR_db = snr
         TARGET_ERRORS = 100
 
-        err = {k: 0 for k in ['zf_unc', 'mmse_unc', 'ml_unc', 'zf_cod', 'mmse_cod', 'ml_cod']}
+        err = {k: 0 for k in [
+            'zf_unc', 'mmse_unc', 'ml_unc',
+            'zf_cod', 'mmse_cod', 'ml_cod',
+            'zf_llr', 'mmse_llr', 'ml_llr'
+        ]}
+
         bits = {k: 0 for k in err.keys()}
         evm_zf_acc, evm_mmse_acc = [], []
 
@@ -263,6 +294,10 @@ class QAM:
             dec_mmse_cod = self.decode_coded(self.y_mmse_cod)
             dec_ml_cod = self.decode_coded(self.y_ml_cod)
 
+            dec_zf_llr = self.decode_coded_llr(self.y_zf_cod)
+            dec_mmse_llr = self.decode_coded_llr(self.y_mmse_cod)
+            dec_ml_llr = self.decode_coded_llr(self.y_ml_cod)
+
             n_unc = len(self.x_bytes_unc)
             n_cod = len(self.info_bytes)
 
@@ -272,9 +307,14 @@ class QAM:
             err['zf_cod'] += int(np.sum(dec_zf_cod != self.info_bytes))
             err['mmse_cod'] += int(np.sum(dec_mmse_cod != self.info_bytes))
             err['ml_cod'] += int(np.sum(dec_ml_cod != self.info_bytes))
+            err['zf_llr'] += int(np.sum(dec_zf_llr != self.info_bytes))
+            err['mmse_llr'] += int(np.sum(dec_mmse_llr != self.info_bytes))
+            err['ml_llr'] += int(np.sum(dec_ml_llr != self.info_bytes))
 
             for k in ['zf_unc', 'mmse_unc', 'ml_unc']: bits[k] += n_unc
             for k in ['zf_cod', 'mmse_cod', 'ml_cod']: bits[k] += n_cod
+            for k in ['zf_llr', 'mmse_llr', 'ml_llr']:
+                bits[k] += n_cod
 
 
             evm_zf_acc.append(np.sum(np.abs(self.x_qam_unc - self.y_zf_unc) ** 2) / len(self.x_qam_unc))
@@ -289,6 +329,9 @@ class QAM:
                 safe_ber(err['mmse_cod'], bits['mmse_cod']),
                 safe_ber(err['ml_unc'], bits['ml_unc']),
                 safe_ber(err['ml_cod'], bits['ml_cod']),
+                safe_ber(err['zf_llr'], bits['zf_llr']),
+                safe_ber(err['mmse_llr'], bits['mmse_llr']),
+                safe_ber(err['ml_llr'], bits['ml_llr']),
                 float(np.mean(evm_zf_acc)) if evm_zf_acc else 0.0,
                 float(np.mean(evm_mmse_acc)) if evm_mmse_acc else 0.0)
 
@@ -324,9 +367,11 @@ class QAM:
         ber_zf_cod_avg, ber_mmse_cod_avg = [], []
         evm_zf_unc_avg, evm_mmse_unc_avg = [], []
         ber_ml_unc_avg, ber_ml_cod_avg = [], []
+        ber_zf_llr_avg, ber_mmse_llr_avg, ber_ml_llr_avg = [], [], []
 
         for snr in snr_range:
             b_zu, b_mu, b_zc, b_mc, b_mlu, b_mlc = [], [], [], [], [], []
+            b_zllr, b_mllr, b_mlll = [], [], []
             e_zu, e_mu = [], []
 
             for _ in range(n_iter):
@@ -334,14 +379,25 @@ class QAM:
                 b_zu.append(res[0]); b_mu.append(res[1])
                 b_zc.append(res[2]); b_mc.append(res[3])
                 b_mlu.append(res[4]); b_mlc.append(res[5])
-                e_zu.append(res[6]); e_mu.append(res[7])
+
+                b_zllr.append(res[6])
+                b_mllr.append(res[7])
+                b_mlll.append(res[8])
+
+                e_zu.append(res[9])
+                e_mu.append(res[10])
 
             ber_zf_unc_avg.append(np.mean(b_zu)); ber_mmse_unc_avg.append(np.mean(b_mu))
             ber_zf_cod_avg.append(np.mean(b_zc)); ber_mmse_cod_avg.append(np.mean(b_mc))
             ber_ml_unc_avg.append(np.mean(b_mlu)); ber_ml_cod_avg.append(np.mean(b_mlc))
             evm_zf_unc_avg.append(np.mean(e_zu)); evm_mmse_unc_avg.append(np.mean(e_mu))
-
-            print(f"SNR {snr:2d} | ZF Uncoded: {np.mean(b_zu):.3e} | ZF Coded: {np.mean(b_zc):.3e} || MMSE Uncoded: {np.mean(b_mu):.3e} | MMSE Coded: {np.mean(b_mc):.3e}")
+            ber_zf_llr_avg.append(np.mean(b_zllr))
+            ber_mmse_llr_avg.append(np.mean(b_mllr))
+            ber_ml_llr_avg.append(np.mean(b_mlll))
+            print(f"SNR {snr:2d} | "
+                  f"ZF Uncoded: {np.mean(b_zu):.3e} | ZF Coded: {np.mean(b_zc):.3e} | ZF LLR: {np.mean(b_zllr):.3e} || "
+                  f"MMSE Uncoded: {np.mean(b_mu):.3e} | MMSE Coded: {np.mean(b_mc):.3e} | MMSE LLR: {np.mean(b_mllr):.3e}" 
+                  f"ML Uncoded: {np.mean(b_mlu):.3e} | MML Coded: {np.mean(b_mlc):.3e} | ML LLR: {np.mean(b_mlll):.3e}")
 
         plt.figure(figsize=(12, 5))
 
@@ -353,6 +409,9 @@ class QAM:
         plt.semilogy(snr_range, ber_mmse_cod_avg, '--', label="MMSE Coded", color='orange')
         plt.semilogy(snr_range, ber_ml_unc_avg, '-', label="ML Uncoded", color='green')
         plt.semilogy(snr_range, ber_ml_cod_avg, '--', label="ML Coded", color='green')
+        plt.semilogy(snr_range, ber_zf_llr_avg, ':', label="ZF LLR", color='blue')
+        plt.semilogy(snr_range, ber_mmse_llr_avg, ':', label="MMSE LLR", color='orange')
+        plt.semilogy(snr_range, ber_ml_llr_avg, ':', label="ML LLR", color='green')
         plt.xlabel("SNR (dB)")
         plt.ylabel("BER")
         plt.grid(True, which="both", linestyle='--', alpha=0.6)
