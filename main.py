@@ -222,7 +222,7 @@ class QAM:
     def decode_coded(self, output):
         modem = QAMModem(self.M)
 
-        # soft или hard — пока оставим hard (как у тебя было)
+        
         demod_bits = np.array(modem.demodulate(output, demod_type='hard'))
 
         half = len(demod_bits) // 2
